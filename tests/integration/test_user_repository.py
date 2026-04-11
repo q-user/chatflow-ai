@@ -4,7 +4,7 @@ from infrastructure.database.repositories.user_repository import UserRepository
 
 
 @pytest.mark.asyncio
-async def test_user_repository_add_and_get(db_session):
+async def test_user_repository_add_and_get(db_session, test_company):
     """
     Проверяем полный цикл:
     Domain User -> UserRepository -> SQLAlchemy -> SQLite -> Domain User
@@ -12,8 +12,9 @@ async def test_user_repository_add_and_get(db_session):
     # 1. Инициализируем репозиторий с тестовой сессией
     repo = UserRepository(db_session)
 
-    # 2. Создаем чистую доменную сущность
+    # 2. Создаем чистую доменную сущность с привязкой к компании
     new_user = User(
+        company_id=test_company.id,
         email="test@example.com",
         hashed_password="extremely_safe_password",
         is_active=True,
@@ -37,12 +38,12 @@ async def test_user_repository_add_and_get(db_session):
 
 
 @pytest.mark.asyncio
-async def test_user_repository_list(db_session):
+async def test_user_repository_list(db_session, test_company):
     repo = UserRepository(db_session)
 
-    # Добавляем двух пользователей
-    await repo.add(User(email="u1@test.com", hashed_password="1"))
-    await repo.add(User(email="u2@test.com", hashed_password="2"))
+    # Добавляем двух пользователей в компанию
+    await repo.add(User(company_id=test_company.id, email="u1@test.com", hashed_password="1"))
+    await repo.add(User(company_id=test_company.id, email="u2@test.com", hashed_password="2"))
 
     users = await repo.list()
     assert len(users) == 2

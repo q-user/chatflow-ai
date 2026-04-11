@@ -1,0 +1,26 @@
+from datetime import datetime
+from uuid import uuid4
+
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from infrastructure.database.base import Base
+
+
+class CompanyTable(Base):
+    """SQLAlchemy model for the companies table."""
+
+    __tablename__ = "companies"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # relationships
+    users: Mapped[list["UserTable"]] = relationship(back_populates="company")  # type: ignore[name-defined]  # noqa: F821
+    bots: Mapped[list["BotInstanceTable"]] = relationship(back_populates="company")  # type: ignore[name-defined]  # noqa: F821

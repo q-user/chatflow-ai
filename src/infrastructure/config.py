@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     secret_key: str = ""
+    bot_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
