@@ -1,0 +1,32 @@
+# docker-compose.dev.yml
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: chatflow_db
+    # Пробрасываем порт 5432 наружу на ваш компьютер
+    ports:
+      - "5432:5432"
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  redis:
+    image: redis:8-alpine
+    # Пробрасываем порт 6379 наружу
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  dev-db-data:
