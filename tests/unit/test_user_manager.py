@@ -70,8 +70,8 @@ async def test_register_with_existing_company(
 ):
     """Register with company_id → no new Company created, uses existing one."""
     initial_count = (
-        await db_session.execute(select(CompanyTable))
-    ).scalars().all().__len__()
+        (await db_session.execute(select(CompanyTable))).scalars().all().__len__()
+    )
 
     await client.post(
         "/auth/register",

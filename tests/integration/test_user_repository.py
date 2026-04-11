@@ -42,8 +42,12 @@ async def test_user_repository_list(db_session, test_company):
     repo = UserRepository(db_session)
 
     # Добавляем двух пользователей в компанию
-    await repo.add(User(company_id=test_company.id, email="u1@test.com", hashed_password="1"))
-    await repo.add(User(company_id=test_company.id, email="u2@test.com", hashed_password="2"))
+    await repo.add(
+        User(company_id=test_company.id, email="u1@test.com", hashed_password="1")
+    )
+    await repo.add(
+        User(company_id=test_company.id, email="u2@test.com", hashed_password="2")
+    )
 
     users = await repo.list()
     assert len(users) == 2

@@ -24,7 +24,9 @@ async def test_create_company(db_session: AsyncSession):
     assert isinstance(company.id, uuid.UUID)
 
     # Verify it's in the DB
-    result = await db_session.execute(select(CompanyTable).where(CompanyTable.id == company.id))
+    result = await db_session.execute(
+        select(CompanyTable).where(CompanyTable.id == company.id)
+    )
     saved = result.scalar_one()
     assert saved.name == "Test Company"
 
@@ -46,7 +48,9 @@ async def test_user_requires_company_id(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_user_telegram_id_unique(db_session: AsyncSession, test_company: CompanyTable):
+async def test_user_telegram_id_unique(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """Two users cannot have the same telegram_id (UNIQUE constraint)."""
     user1 = UserTable(
         email="u1@example.com",
@@ -69,7 +73,9 @@ async def test_user_telegram_id_unique(db_session: AsyncSession, test_company: C
 
 
 @pytest.mark.asyncio
-async def test_user_yandex_id_unique(db_session: AsyncSession, test_company: CompanyTable):
+async def test_user_yandex_id_unique(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """Two users cannot have the same yandex_id (UNIQUE constraint)."""
     user1 = UserTable(
         email="u1@example.com",
@@ -112,7 +118,9 @@ async def test_bot_instance_fk_company(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_messenger_type_check(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_messenger_type_check(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance rejects invalid messenger_type (CheckConstraint)."""
     bot = BotInstanceTable(
         company_id=test_company.id,
@@ -158,8 +166,12 @@ async def test_company_bots_relationship(db_session: AsyncSession):
     db_session.add(company)
     await db_session.flush()
 
-    bot1 = BotInstanceTable(company_id=company.id, messenger_type="TG", token="tg_token")
-    bot2 = BotInstanceTable(company_id=company.id, messenger_type="YM", token="ym_token")
+    bot1 = BotInstanceTable(
+        company_id=company.id, messenger_type="TG", token="tg_token"
+    )
+    bot2 = BotInstanceTable(
+        company_id=company.id, messenger_type="YM", token="ym_token"
+    )
     db_session.add_all([bot1, bot2])
     await db_session.flush()
 
@@ -176,7 +188,9 @@ async def test_company_bots_relationship(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_user_company_relationship(db_session: AsyncSession, test_company: CompanyTable):
+async def test_user_company_relationship(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """User.company relationship returns the associated company."""
     user = UserTable(
         email="u@co.com",
@@ -198,10 +212,16 @@ async def test_user_company_relationship(db_session: AsyncSession, test_company:
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_valid_messenger_types(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_valid_messenger_types(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance accepts both TG and YM messenger types."""
-    tg_bot = BotInstanceTable(company_id=test_company.id, messenger_type="TG", token="tg")
-    ym_bot = BotInstanceTable(company_id=test_company.id, messenger_type="YM", token="ym")
+    tg_bot = BotInstanceTable(
+        company_id=test_company.id, messenger_type="TG", token="tg"
+    )
+    ym_bot = BotInstanceTable(
+        company_id=test_company.id, messenger_type="YM", token="ym"
+    )
     db_session.add_all([tg_bot, ym_bot])
     await db_session.flush()
 
@@ -210,7 +230,9 @@ async def test_bot_instance_valid_messenger_types(db_session: AsyncSession, test
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_default_module_type(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_default_module_type(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance defaults to module_type='finance'."""
     bot = BotInstanceTable(company_id=test_company.id, messenger_type="TG", token="tg")
     db_session.add(bot)
@@ -220,7 +242,9 @@ async def test_bot_instance_default_module_type(db_session: AsyncSession, test_c
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_custom_module_type(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_custom_module_type(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance accepts custom module_type."""
     bot = BotInstanceTable(
         company_id=test_company.id,
@@ -235,7 +259,9 @@ async def test_bot_instance_custom_module_type(db_session: AsyncSession, test_co
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_config_json(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_config_json(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance accepts dict config (stored as JSON)."""
     bot = BotInstanceTable(
         company_id=test_company.id,
@@ -250,7 +276,9 @@ async def test_bot_instance_config_json(db_session: AsyncSession, test_company: 
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_config_nullable(db_session: AsyncSession, test_company: CompanyTable):
+async def test_bot_instance_config_nullable(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """BotInstance config can be None."""
     bot = BotInstanceTable(
         company_id=test_company.id,
@@ -265,7 +293,9 @@ async def test_bot_instance_config_nullable(db_session: AsyncSession, test_compa
 
 
 @pytest.mark.asyncio
-async def test_user_default_status_fields(db_session: AsyncSession, test_company: CompanyTable):
+async def test_user_default_status_fields(
+    db_session: AsyncSession, test_company: CompanyTable
+):
     """User has default values for is_superuser, is_verified, is_active."""
     user = UserTable(
         email="defaults@co.com",
