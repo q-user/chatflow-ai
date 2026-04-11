@@ -104,9 +104,7 @@ async def test_verify_otp_success(
     assert verify_resp.json()["status"] == "ok"
 
     # Verify telegram_id in DB
-    result = await db_session.execute(
-        select(UserTable).where(UserTable.id == user_id)
-    )
+    result = await db_session.execute(select(UserTable).where(UserTable.id == user_id))
     user = result.scalar_one()
     assert user.telegram_id == "telegram_12345"
 

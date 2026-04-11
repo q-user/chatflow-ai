@@ -1,4 +1,3 @@
-import os
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -20,33 +19,40 @@ from presentation.api.main import app
 from presentation.api.otp import get_otp_service
 
 
+def _require_test_db_url() -> str:
+    """Get TEST_DATABASE_URL or raise RuntimeError."""
+    from os import environ
+
+    url = environ.get("TEST_DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "TEST_DATABASE_URL is not set. "
+            "Tests must run against PostgreSQL. "
+            "Set TEST_DATABASE_URL in .env or environment."
+        )
+    return url
+
+
 # ============================================================
-# Database selection: PostgreSQL (if TEST_DATABASE_URL set) or SQLite fallback
+# PostgreSQL-only test infrastructure
 # ============================================================
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
-USE_POSTGRESQL = TEST_DATABASE_URL is not None
+TEST_DATABASE_URL = _require_test_db_url()
 
 
 @pytest_asyncio.fixture(scope="session")
-async def pg_test_db():
+async def pg_test_db() -> AsyncGenerator[str, None]:
     """Create a temporary PostgreSQL database for the test session.
 
     Creates test_{uuid}, yields its URL, then drops it.
     Requires TEST_DATABASE_URL pointing to the 'postgres' maintenance DB.
     """
-    if not USE_POSTGRESQL:
-        yield None
-        return
-
     db_name = f"test_{uuid.uuid4().hex[:12]}"
 
-    # Connect to maintenance DB to create/drop test database
     maintenance_url = TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
     engine = create_async_engine(maintenance_url, isolation_level="AUTOCOMMIT")
 
     try:
         async with engine.connect() as conn:
-            # Kill existing connections to the test db (idempotent)
             await conn.execute(
                 text(
                     f"""
@@ -65,7 +71,6 @@ async def pg_test_db():
 
     finally:
         async with engine.connect() as conn:
-            # Disconnect all sessions from test db before dropping
             await conn.execute(
                 text(
                     f"""
@@ -81,29 +86,14 @@ async def pg_test_db():
 
 
 @pytest_asyncio.fixture
-async def db_engine(pg_test_db):
-    """Create a fresh database engine — PostgreSQL or SQLite."""
-    if USE_POSTGRESQL and pg_test_db:
-        # PostgreSQL: create tables via metadata
-        engine = create_async_engine(pg_test_db, echo=False)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    else:
-        # SQLite fallback: in-memory
-        engine = create_async_engine(
-            "sqlite+aiosqlite://",
-            echo=False,
-        )
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
+async def db_engine(pg_test_db: str) -> AsyncGenerator:
+    """Create engine pointing to the temporary test PostgreSQL database."""
+    engine = create_async_engine(pg_test_db, echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     try:
         yield engine
     finally:
-        if not (USE_POSTGRESQL and pg_test_db):
-            # Only drop tables for SQLite — PG db is dropped at session end
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.drop_all)
         await engine.dispose()
 
 
@@ -148,13 +138,17 @@ async def otp_service(fake_redis: FakeAsyncRedis) -> OTPService:
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession, fake_redis: FakeAsyncRedis) -> AsyncGenerator[AsyncClient, None]:
+async def client(
+    db_session: AsyncSession, fake_redis: FakeAsyncRedis
+) -> AsyncGenerator[AsyncClient, None]:
     """Provide an async HTTP client with database and Redis dependency overrides."""
 
     async def override_get_db():
         yield db_session
 
-    async def override_get_user_db() -> AsyncGenerator[SQLAlchemyUserDatabase[UserTable, uuid.UUID], None]:
+    async def override_get_user_db() -> AsyncGenerator[
+        SQLAlchemyUserDatabase[UserTable, uuid.UUID], None
+    ]:
         yield SQLAlchemyUserDatabase(db_session, UserTable)
 
     async def override_get_otp_service() -> OTPService:
@@ -210,15 +204,14 @@ def bot_api_headers() -> dict[str, str]:
 
 # Global settings override for tests
 @pytest.fixture(autouse=True)
-def override_settings(monkeypatch: pytest.MonkeyPatch, pg_test_db: str | None) -> None:
+def override_settings(monkeypatch: pytest.MonkeyPatch, pg_test_db: str) -> None:
     """Override settings for tests: secret_key, bot_api_key, and database URL."""
-    monkeypatch.setattr("infrastructure.config.settings.secret_key", "test_secret_key_for_jwt")
-    monkeypatch.setattr("infrastructure.config.settings.bot_api_key", "test_bot_api_key")
+    monkeypatch.setattr(
+        "infrastructure.config.settings.secret_key", "test_secret_key_for_jwt"
+    )
+    monkeypatch.setattr(
+        "infrastructure.config.settings.bot_api_key", "test_bot_api_key"
+    )
     monkeypatch.setattr("infrastructure.config.settings.redis_url", "redis://localhost")
-
-    if USE_POSTGRESQL and pg_test_db:
-        monkeypatch.setattr("infrastructure.config.settings.database_url", pg_test_db)
-        monkeypatch.setattr("infrastructure.config.settings.database_sync_url", pg_test_db)
-    else:
-        monkeypatch.setattr("infrastructure.config.settings.database_url", "sqlite+aiosqlite://")
-        monkeypatch.setattr("infrastructure.config.settings.database_sync_url", "sqlite+aiosqlite://")
+    monkeypatch.setattr("infrastructure.config.settings.database_url", pg_test_db)
+    monkeypatch.setattr("infrastructure.config.settings.database_sync_url", pg_test_db)

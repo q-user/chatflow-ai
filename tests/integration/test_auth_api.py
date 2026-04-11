@@ -1,6 +1,5 @@
 """Integration tests for auth API endpoints (register, login, me)."""
 
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -31,7 +30,9 @@ async def test_register_returns_201(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_creates_company_in_db(client: AsyncClient, db_session: AsyncSession):
+async def test_register_creates_company_in_db(
+    client: AsyncClient, db_session: AsyncSession
+):
     """Registration without company_id creates a new Company in DB."""
     await client.post(
         "/auth/register",

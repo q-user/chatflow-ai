@@ -5,6 +5,7 @@ Revises: bf879aff99fb
 Create Date: 2026-04-11 12:19:13.236223
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -13,15 +14,15 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e8c6f29cf841'
-down_revision: Union[str, Sequence[str], None] = 'bf879aff99fb'
+revision: str = "e8c6f29cf841"
+down_revision: Union[str, Sequence[str], None] = "bf879aff99fb"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     """Upgrade schema.
-    
+
     Order matters:
     1. CREATE companies (must exist before users.company_id FK)
     2. ALTER users: add columns (company_id nullable first, then data migration, then NOT NULL)

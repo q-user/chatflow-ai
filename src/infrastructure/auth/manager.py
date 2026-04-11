@@ -41,7 +41,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserTable, uuid.UUID]):
 
         if not company_id:
             # Создаём компанию «на лету» в рамках той же сессии
-            company_name = user_create.company_name or f"Company-{user_create.email.split('@')[0]}"
+            company_name = (
+                user_create.company_name or f"Company-{user_create.email.split('@')[0]}"
+            )
 
             company = CompanyTable(name=company_name)
             self._session.add(company)

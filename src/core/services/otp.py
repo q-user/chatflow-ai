@@ -117,7 +117,9 @@ class UnknownMessengerTypeError(Exception):
 
     def __init__(self, messenger_type: str) -> None:
         self.messenger_type = messenger_type
-        super().__init__(f"Unknown messenger type: {messenger_type}. Expected TG or YM.")
+        super().__init__(
+            f"Unknown messenger type: {messenger_type}. Expected TG or YM."
+        )
 
 
 class UserNotFoundError(Exception):

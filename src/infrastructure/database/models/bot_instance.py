@@ -21,7 +21,9 @@ class BotInstanceTable(Base):
     )
     messenger_type: Mapped[str] = mapped_column(String(10), nullable=False)  # TG / YM
     token: Mapped[str] = mapped_column(String(512), nullable=False)  # bot API token
-    status: Mapped[str] = mapped_column(String(20), default="active")  # active / inactive
+    status: Mapped[str] = mapped_column(
+        String(20), default="active"
+    )  # active / inactive
     module_type: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="finance"
     )  # finance, estimator, hr, etc.

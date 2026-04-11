@@ -53,9 +53,7 @@ async def test_generate_code_stores_in_redis(
 
 
 @pytest.mark.asyncio
-async def test_generate_code_rate_limit(
-    otp_service: OTPService, user_id: uuid.UUID
-):
+async def test_generate_code_rate_limit(otp_service: OTPService, user_id: uuid.UUID):
     """Second generate within 60s raises RateLimitExceeded."""
     # First call — success
     await otp_service.generate_code(user_id)
@@ -78,9 +76,7 @@ async def test_generate_code_rate_limit_key(
 
 
 @pytest.mark.asyncio
-async def test_verify_code_valid(
-    otp_service: OTPService, user_id: uuid.UUID
-):
+async def test_verify_code_valid(otp_service: OTPService, user_id: uuid.UUID):
     """Valid code verification returns True."""
     code = await otp_service.generate_code(user_id)
 
@@ -89,9 +85,7 @@ async def test_verify_code_valid(
 
 
 @pytest.mark.asyncio
-async def test_verify_code_invalid(
-    otp_service: OTPService, user_id: uuid.UUID
-):
+async def test_verify_code_invalid(otp_service: OTPService, user_id: uuid.UUID):
     """Wrong code returns False."""
     await otp_service.generate_code(user_id)
 
@@ -100,18 +94,14 @@ async def test_verify_code_invalid(
 
 
 @pytest.mark.asyncio
-async def test_verify_code_no_key(
-    otp_service: OTPService, user_id: uuid.UUID
-):
+async def test_verify_code_no_key(otp_service: OTPService, user_id: uuid.UUID):
     """Verify without any generated code returns False."""
     result = await otp_service.verify_code(user_id, "123456")
     assert result is False
 
 
 @pytest.mark.asyncio
-async def test_verify_code_idempotent(
-    otp_service: OTPService, user_id: uuid.UUID
-):
+async def test_verify_code_idempotent(otp_service: OTPService, user_id: uuid.UUID):
     """Second verification of same code returns False (GETDEL removes key)."""
     code = await otp_service.generate_code(user_id)
 
