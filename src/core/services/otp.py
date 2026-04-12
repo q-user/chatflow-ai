@@ -1,9 +1,6 @@
 import uuid
 
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from infrastructure.database.models.user import UserTable
 
 
 class OTPService:
@@ -11,7 +8,11 @@ class OTPService:
 
     Redis keys:
     - otp:{user_id} → 6-digit code (TTL=300s)
+    - otp_reverse:{code} → user_id (TTL=300s) — for bot reverse lookup
     - otp_rate:{user_id} → rate-limit flag (TTL=60s)
+
+    Verification is idempotent: both verify_code() and verify_code_by_value()
+    atomically delete BOTH keys to prevent cross-channel replay attacks.
     """
 
     OTP_TTL = 300  # 5 минут
@@ -22,6 +23,10 @@ class OTPService:
 
     async def generate_code(self, user_id: uuid.UUID) -> str:
         """Generate a 6-digit OTP code for a user.
+
+        Writes two keys atomically:
+        - otp:{user_id} → code (for web cabinet verification)
+        - otp_reverse:{code} → user_id (for bot reverse lookup)
 
         Rate-limited to 1 request per 60 seconds per user.
 
@@ -34,28 +39,59 @@ class OTPService:
 
         code = self._generate_code()
         otp_key = f"otp:{user_id}"
+        reverse_key = f"otp_reverse:{code}"
 
-        # Атомарно: записываем код + rate-limit флаг
+        # Атомарно: записываем код + reverse lookup + rate-limit флаг
         async with self._redis.pipeline(transaction=True) as pipe:
             await pipe.set(otp_key, code, ex=self.OTP_TTL)
+            await pipe.set(reverse_key, str(user_id), ex=self.OTP_TTL)
             await pipe.set(rate_key, "1", ex=self.RATE_LIMIT_TTL)
             await pipe.execute()
 
         return code
 
     async def verify_code(self, user_id: uuid.UUID, code: str) -> bool:
-        """Verify an OTP code for a user.
+        """Verify an OTP code for a user (web cabinet flow).
 
-        Uses atomic GETDEL to prevent replay attacks.
-        The key is consumed regardless of code correctness — this prevents
-        brute-force retries but also means a wrong code consumes the OTP.
+        Atomically deletes BOTH keys (otp:{user_id} and otp_reverse:{code})
+        to prevent the bot from re-verifying the same code after the web
+        cabinet has consumed it.
+
         Returns True if code was valid, False otherwise.
         """
         otp_key = f"otp:{user_id}"
-        stored_code = await self._redis.getdel(otp_key)
-        if stored_code is None:
+        reverse_key = f"otp_reverse:{code}"
+
+        async with self._redis.pipeline(transaction=True) as pipe:
+            await pipe.getdel(otp_key)
+            await pipe.getdel(reverse_key)
+            results = await pipe.execute()
+
+        stored = results[0]
+        if stored is None:
             return False
-        return stored_code.decode() == code
+        return stored.decode() == code
+
+    async def verify_code_by_value(self, code: str) -> uuid.UUID | None:
+        """Find user_id by OTP code value (reverse lookup, bot flow).
+
+        Atomically deletes BOTH keys (otp_reverse:{code} and otp:{user_id})
+        to prevent the web cabinet from re-verifying the same code after
+        the bot has consumed it.
+
+        :returns: user_id if code is valid, None otherwise.
+        """
+        reverse_key = f"otp_reverse:{code}"
+        user_id_bytes = await self._redis.getdel(reverse_key)
+        if user_id_bytes is None:
+            return None
+
+        user_id = uuid.UUID(user_id_bytes.decode())
+
+        # Also delete the forward key to prevent web cabinet replay
+        await self._redis.delete(f"otp:{user_id}")
+
+        return user_id
 
     @staticmethod
     def _generate_code() -> str:
@@ -64,65 +100,8 @@ class OTPService:
 
         return f"{secrets.randbelow(1_000_000):06d}"
 
-    async def verify_and_link_messenger(
-        self,
-        user_id: uuid.UUID,
-        code: str,
-        messenger_type: str,  # Already validated as Literal["TG", "YM"] at schema level
-        messenger_id: str,
-        session: AsyncSession,
-    ) -> None:
-        """Verify OTP and link messenger to user.
-
-        :raises InvalidOTPError: If code is invalid or expired.
-        :raises UserNotFoundError: If user doesn't exist.
-        """
-        # Атомарная верификация (GETDEL)
-        if not await self.verify_code(user_id, code):
-            raise InvalidOTPError("Invalid or expired OTP code")
-
-        messenger_field = self._MESSENGER_MAP.get(messenger_type)
-        # messenger_type уже валидирован схемой — это не должно случиться
-        if messenger_field is None:  # pragma: no cover
-            raise UnknownMessengerTypeError(messenger_type)
-
-        user = await session.get(UserTable, user_id)
-        if user is None:
-            raise UserNotFoundError("User not found")
-
-        setattr(user, messenger_field, messenger_id)
-        # session.commit() вызывается на уровне роутера (get_db_session)
-
-    # Маппинг messenger_type → поле UserTable
-    _MESSENGER_MAP: dict[str, str] = {
-        "TG": "telegram_id",
-        "YM": "yandex_id",
-    }
-
 
 class RateLimitExceeded(Exception):
     """Raised when OTP generation is rate-limited."""
-
-    pass
-
-
-class InvalidOTPError(Exception):
-    """Raised when OTP code is invalid or expired."""
-
-    pass
-
-
-class UnknownMessengerTypeError(Exception):
-    """Raised when messenger_type is not recognized."""
-
-    def __init__(self, messenger_type: str) -> None:
-        self.messenger_type = messenger_type
-        super().__init__(
-            f"Unknown messenger type: {messenger_type}. Expected TG or YM."
-        )
-
-
-class UserNotFoundError(Exception):
-    """Raised when user is not found."""
 
     pass

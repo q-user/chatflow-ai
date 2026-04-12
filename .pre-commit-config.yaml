@@ -24,9 +24,4 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-      - id: mypy-check
-        name: mypy check
-        entry: uv run mypy src/
-        language: system
-        types: [python]
-        pass_filenames: false
+

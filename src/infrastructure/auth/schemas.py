@@ -61,9 +61,12 @@ class OTPGenerateResponse(BaseModel):
 
 
 class OTPVerifyRequest(BaseModel):
-    """Request body for OTP verification (bot API key authenticated)."""
+    """Request body for OTP verification (bot API key authenticated).
 
-    user_id: UUID4
+    user_id is intentionally omitted — it is resolved via reverse OTP lookup
+    from the code value. The bot client should not need to know user_id.
+    """
+
     code: str
     messenger_id: str
     messenger_type: Literal["TG", "YM"]

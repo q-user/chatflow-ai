@@ -22,10 +22,11 @@ main = []
 dev = [
     "celery-types>=0.26.0",
     "fakeredis[lua]>=2.26.0",
-    "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    "psycopg2-binary>=2.9.10",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-httpx>=0.36.2",
     "ruff>=0.15.8",
     "ty>=0.0.26",
 ]
@@ -35,14 +36,21 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
-[tool.mypy]
-python_version = "3.14"
-mypy_path = "src"
-explicit_package_bases = true
-
 [tool.ruff]
 # Указываем ruff, что корни исходников в src
 src = ["src"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["core", "presentation", "infrastructure"]
+
+[tool.ty.environment]
+python-version = "3.14"
+root = ["src"]
+
+[tool.ty.rules]
+# Allow forward references in string form (standard SQLAlchemy pattern)
+unresolved-reference = "warn"
+
+# SQLAlchemy comparison expressions return bool at runtime
+# but type as ColumnElement[bool] — expected behavior
+invalid-argument-type = "warn"

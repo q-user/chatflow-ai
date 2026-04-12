@@ -99,9 +99,15 @@ async def test_user_yandex_id_unique(
 
 @pytest.mark.asyncio
 async def test_bot_instance_fk_company(db_session: AsyncSession):
-    """BotInstance cannot be created with non-existent company_id (FK constraint)."""
-    # Enable FK enforcement for SQLite
-    await db_session.execute(text("PRAGMA foreign_keys = ON"))
+    """BotInstance cannot be created with non-existent company_id (FK constraint).
+
+    On SQLite, PRAGMA foreign_keys must be enabled.
+    On PostgreSQL, FK is enforced automatically.
+    """
+    # Check if we're on SQLite — only then enable PRAGMA
+    dialect_name = db_session.get_bind().dialect.name
+    if dialect_name == "sqlite":
+        await db_session.execute(text("PRAGMA foreign_keys = ON"))
 
     fake_company_id = uuid.uuid4()
     bot = BotInstanceTable(

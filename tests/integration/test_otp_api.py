@@ -1,7 +1,5 @@
 """Integration tests for OTP API endpoints (generate, verify)."""
 
-import uuid
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -47,7 +45,6 @@ async def test_verify_otp_requires_api_key(auth_client: AsyncClient):
     resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": str(uuid.uuid4()),
             "code": "123456",
             "messenger_id": "test_123",
             "messenger_type": "TG",
@@ -63,7 +60,6 @@ async def test_verify_otp_wrong_api_key(auth_client: AsyncClient):
     resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": str(uuid.uuid4()),
             "code": "123456",
             "messenger_id": "test_123",
             "messenger_type": "TG",
@@ -80,20 +76,15 @@ async def test_verify_otp_success(
     bot_api_headers: dict[str, str],
 ):
     """Full OTP flow: generate → verify → telegram_id saved in DB."""
-    # Get current user ID
-    me_resp = await auth_client.get("/users/me")
-    user_id = me_resp.json()["id"]
-
-    # Generate OTP
+    # Generate OTP (user_id resolved via reverse lookup)
     otp_resp = await auth_client.post("/auth/otp")
     assert otp_resp.status_code == 201
     code = otp_resp.json()["code"]
 
-    # Verify OTP with bot API key
+    # Verify OTP with bot API key (no user_id needed)
     verify_resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": user_id,
             "code": code,
             "messenger_id": "telegram_12345",
             "messenger_type": "TG",
@@ -103,7 +94,9 @@ async def test_verify_otp_success(
     assert verify_resp.status_code == 200
     assert verify_resp.json()["status"] == "ok"
 
-    # Verify telegram_id in DB
+    # Verify telegram_id was linked to the user who generated the OTP
+    me_resp = await auth_client.get("/users/me")
+    user_id = me_resp.json()["id"]
     result = await db_session.execute(select(UserTable).where(UserTable.id == user_id))
     user = result.scalar_one()
     assert user.telegram_id == "telegram_12345"
@@ -115,15 +108,10 @@ async def test_verify_otp_invalid_code(
     bot_api_headers: dict[str, str],
 ):
     """POST /auth/otp/verify with wrong code → 404."""
-    # Get current user ID
-    me_resp = await auth_client.get("/users/me")
-    user_id = me_resp.json()["id"]
-
     resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": user_id,
-            "code": "000000",  # Wrong code
+            "code": "000000",  # Wrong code — never generated
             "messenger_id": "telegram_12345",
             "messenger_type": "TG",
         },
@@ -137,14 +125,10 @@ async def test_verify_otp_unknown_messenger_type(
     auth_client: AsyncClient,
     bot_api_headers: dict[str, str],
 ):
-    """POST /auth/otp/verify with invalid messenger_type → 400."""
-    me_resp = await auth_client.get("/users/me")
-    user_id = me_resp.json()["id"]
-
+    """POST /auth/otp/verify with invalid messenger_type → 422."""
     resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": user_id,
             "code": "123456",
             "messenger_id": "wa_12345",
             "messenger_type": "WA",  # Invalid!
@@ -155,24 +139,35 @@ async def test_verify_otp_unknown_messenger_type(
 
 
 @pytest.mark.asyncio
-async def test_verify_otp_user_not_found(
+async def test_verify_otp_code_already_consumed(
     auth_client: AsyncClient,
     bot_api_headers: dict[str, str],
 ):
-    """POST /auth/otp/verify with non-existent user_id → 404."""
-    # Generate OTP first (to have a valid code)
-    await auth_client.post("/auth/otp")
+    """POST /auth/otp/verify with already-used code → 404."""
+    # Generate OTP
+    otp_resp = await auth_client.post("/auth/otp")
+    code = otp_resp.json()["code"]
 
-    # But verify with wrong user_id
+    # First verification — success
     resp = await auth_client.post(
         "/auth/otp/verify",
         json={
-            "user_id": str(uuid.uuid4()),  # Non-existent user
-            "code": "123456",
-            "messenger_id": "telegram_12345",
+            "code": code,
+            "messenger_id": "telegram_first",
             "messenger_type": "TG",
         },
         headers=bot_api_headers,
     )
-    # 404 because user not found (or code doesn't match this user)
+    assert resp.status_code == 200
+
+    # Second verification with same code → 404 (code consumed)
+    resp = await auth_client.post(
+        "/auth/otp/verify",
+        json={
+            "code": code,
+            "messenger_id": "telegram_second",
+            "messenger_type": "TG",
+        },
+        headers=bot_api_headers,
+    )
     assert resp.status_code == 404

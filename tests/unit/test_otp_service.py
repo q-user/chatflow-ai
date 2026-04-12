@@ -164,3 +164,65 @@ async def test_verify_code_consumes_key_on_invalid(
 
     # Real code no longer works — key was consumed by GETDEL
     assert await otp_service.verify_code(user_id, code) is False
+
+
+# ──────────────────────────────────────────────
+# Reverse lookup tests (otp_reverse:{code} → user_id)
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_verify_code_by_value_valid(otp_service: OTPService, user_id: uuid.UUID):
+    """verify_code_by_value returns user_id for valid code."""
+    code = await otp_service.generate_code(user_id)
+
+    result = await otp_service.verify_code_by_value(code)
+    assert result == user_id
+
+
+@pytest.mark.asyncio
+async def test_verify_code_by_value_invalid():
+    """verify_code_by_value returns None for invalid code."""
+    otp_service = OTPService(FakeAsyncRedis(decode_responses=False))
+    result = await otp_service.verify_code_by_value("000000")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_verify_code_by_value_consumes_key(
+    otp_service: OTPService, user_id: uuid.UUID
+):
+    """verify_code_by_value consumes the reverse key (GETDEL)."""
+    code = await otp_service.generate_code(user_id)
+
+    # First lookup — success
+    result = await otp_service.verify_code_by_value(code)
+    assert result == user_id
+
+    # Second lookup — key consumed
+    result = await otp_service.verify_code_by_value(code)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_code_writes_reverse_key(
+    otp_service: OTPService, fake_redis: FakeAsyncRedis, user_id: uuid.UUID
+):
+    """generate_code writes otp_reverse:{code} → user_id."""
+    code = await otp_service.generate_code(user_id)
+
+    stored = await fake_redis.get(f"otp_reverse:{code}")
+    assert stored is not None
+    assert stored.decode() == str(user_id)
+
+
+@pytest.mark.asyncio
+async def test_reverse_key_has_ttl(
+    otp_service: OTPService, fake_redis: FakeAsyncRedis, user_id: uuid.UUID
+):
+    """otp_reverse:{code} has TTL set."""
+    code = await otp_service.generate_code(user_id)
+
+    ttl = await fake_redis.ttl(f"otp_reverse:{code}")
+    assert ttl > 0
+    assert ttl <= OTPService.OTP_TTL

@@ -1,10 +1,13 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.config import settings
 
+# ── Async engine (for FastAPI) ──
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
@@ -29,3 +32,33 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, Any]:
         except Exception:
             await session.rollback()
             raise
+
+
+# ── Sync engine (for Celery tasks) ──
+# Lazily created — only needed when running Celery workers.
+# Deferred to avoid requiring psycopg2 at import time in tests.
+_sync_url: str | None = None
+sync_engine: Any = None
+sync_session_factory: Any = None
+
+
+def _init_sync_engine() -> None:
+    """Initialize sync engine on first use."""
+    global sync_engine, sync_session_factory, _sync_url
+
+    if sync_engine is not None:
+        return
+
+    _sync_url = settings.database_sync_url or settings.database_url.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://"
+    )
+    sync_engine = create_engine(
+        _sync_url,
+        echo=settings.debug,
+        pool_pre_ping=True,
+    )
+    sync_session_factory = sessionmaker(
+        bind=sync_engine,
+        class_=Session,
+        expire_on_commit=False,
+    )

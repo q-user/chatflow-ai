@@ -41,6 +41,10 @@ async def test_user_repository_add_and_get(db_session, test_company):
 async def test_user_repository_list(db_session, test_company):
     repo = UserRepository(db_session)
 
+    # Count users before adding
+    users_before = await repo.list()
+    count_before = len(users_before)
+
     # Добавляем двух пользователей в компанию
     await repo.add(
         User(company_id=test_company.id, email="u1@test.com", hashed_password="1")
@@ -50,5 +54,5 @@ async def test_user_repository_list(db_session, test_company):
     )
 
     users = await repo.list()
-    assert len(users) == 2
-    assert users[0].email in ["u1@test.com", "u2@test.com"]
+    assert len(users) == count_before + 2
+    assert users[-2].email in ["u1@test.com", "u2@test.com"]
