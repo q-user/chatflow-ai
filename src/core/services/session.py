@@ -16,6 +16,8 @@ class SessionSnapshot(BaseModel):
     company_id: uuid.UUID | None = None  # filled by hook_router
     bot_instance_id: uuid.UUID | None = None  # filled by hook_router
     module_type: str | None = None  # filled by hook_router
+    chat_id: str | None = None  # filled by hook_router — where to send result
+    messenger_type: str | None = None  # filled by hook_router — which adapter to use
     items: list[dict]  # [{"text": ..., "file_path": ..., "file_type": ...}]
 
 

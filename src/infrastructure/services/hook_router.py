@@ -10,6 +10,7 @@ import logging
 import uuid
 from typing import Any
 
+from kombu.exceptions import OperationalError
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.messengers import create_adapter
 from infrastructure.services.messenger_link import MessengerLinkService
+from infrastructure.task_queue.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,9 @@ class HookRouterService:
 
         # 5. Inject real bot_instance_id (adapter uses placeholder)
         # Use model_copy for immutability instead of direct mutation
-        envelope = envelope.model_copy(update={"bot_instance_id": bot.id})
+        envelope = envelope.model_copy(
+            update={"bot_instance_id": uuid.UUID(str(bot.id))}
+        )
 
         # 6. Resolve user
         user = await self._resolve_user(envelope, bot.company_id)
@@ -174,12 +178,31 @@ class HookRouterService:
                     )
                     return
 
-                # Fill in missing fields from bot context
-                snapshot.company_id = uuid.UUID(str(user.company_id))  # noqa: PLW2901
-                snapshot.bot_instance_id = uuid.UUID(str(bot.id))  # noqa: PLW2901
-                snapshot.module_type = bot.module_type
+                # Fill in missing fields from bot context (immutable model_copy)
+                snapshot = snapshot.model_copy(
+                    update={
+                        "company_id": uuid.UUID(str(user.company_id)),
+                        "bot_instance_id": uuid.UUID(str(bot.id)),
+                        "module_type": bot.module_type,
+                        "chat_id": envelope.chat_id,
+                        "messenger_type": envelope.messenger_type,
+                    }
+                )
 
-                # TODO: enqueue to Celery for processing
+                # Enqueue to Celery for processing
+                try:
+                    celery_app.send_task(
+                        "compile_session",
+                        kwargs={"snapshot": snapshot.model_dump(mode="json")},
+                    )
+                except OperationalError:
+                    logger.exception("Celery broker unavailable")
+                    await adapter.send_text(
+                        envelope.chat_id,
+                        "Система временно недоступна. Попробуйте позже.",
+                    )
+                    return
+
                 await adapter.send_text(
                     envelope.chat_id,
                     f"Принято {len(snapshot.items)} элементов. Обрабатываю...",

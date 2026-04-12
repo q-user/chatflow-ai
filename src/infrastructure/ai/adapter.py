@@ -25,6 +25,9 @@ GEMMA4_DEFAULT_PARAMS = {
 # CoT token for Gemma 4 thinking mode
 COT_TOKEN = "<|think|>"
 
+# Maximum file size for image encoding (10MB)
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
 
 class OpenRouterAdapter(IMultiModalAI):
     """OpenAI-compatible adapter optimized for Gemma 4 via OpenRouter.
@@ -171,7 +174,6 @@ class OpenRouterAdapter(IMultiModalAI):
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
         }
 
         body: dict[str, Any] = {
@@ -182,6 +184,17 @@ class OpenRouterAdapter(IMultiModalAI):
 
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+
+        logger.debug(
+            "AI API call: model=%s, messages=%d, json_mode=%s",
+            self._model,
+            len(messages),
+            json_mode,
+        )
+
+        # TODO: add retry layer for transient errors (429/502/503)
+        # with exponential backoff (1-2 attempts, short delay)
+        # to reduce full Celery retry cycles.
 
         try:
             resp = await http.post(url, json=body, headers=headers)
@@ -205,6 +218,7 @@ class OpenRouterAdapter(IMultiModalAI):
         try:
             return response["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as e:
+            logger.warning("Unexpected API response: %s", list(response.keys()))
             raise AIServiceError("Unexpected API response structure") from e
 
     @staticmethod
@@ -213,10 +227,15 @@ class OpenRouterAdapter(IMultiModalAI):
 
         Gemma 4 with <|think|> wraps reasoning in `````` tags.
         The actual answer follows after the closing tag.
+        If the closing tag is missing (model ran out of tokens), returns empty string.
         """
         think_end_tag = "</think>"
+        think_start_tag = "<|think|>"
         if think_end_tag in content:
             return content.split(think_end_tag, 1)[-1].strip()
+        if content.strip().startswith(think_start_tag):
+            # Unclosed thinking — model ran out of tokens
+            return ""
         return content
 
     # ──────────────────────────────────────────────
@@ -229,6 +248,11 @@ class OpenRouterAdapter(IMultiModalAI):
         file_path = Path(path)
         if not file_path.exists():
             raise AIServiceError(f"Image file not found: {path}")
+        size = file_path.stat().st_size
+        if size > MAX_IMAGE_SIZE:
+            raise AIServiceError(
+                f"Image file too large: {size} bytes (max {MAX_IMAGE_SIZE})"
+            )
         return base64.b64encode(file_path.read_bytes()).decode("utf-8")
 
     @staticmethod
@@ -241,5 +265,6 @@ class OpenRouterAdapter(IMultiModalAI):
             ".png": "image/png",
             ".gif": "image/gif",
             ".webp": "image/webp",
+            ".pdf": "application/pdf",
         }
         return mime_map.get(ext, "application/octet-stream")
