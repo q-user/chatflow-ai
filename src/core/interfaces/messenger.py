@@ -24,11 +24,20 @@ class IMessengerAdapter(ABC):
         ...
 
     @abstractmethod
-    async def send_text(self, chat_id: str, text: str) -> None:
+    async def send_text(
+        self,
+        chat_id: str,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+    ) -> None:
         """Send a text message.
 
         :param chat_id: Target chat ID.
         :param text: Message text.
+        :param buttons: Optional inline keyboard rows.
+            Each row is a list of button dicts:
+            {"text": "Label", "payload": "action_name"}
+            If None — no keyboard (plain text message).
         """
         ...
 
@@ -53,3 +62,17 @@ class IMessengerAdapter(ABC):
         :returns: Path to the saved file.
         """
         ...
+
+    async def answer_callback(self, callback_id: str) -> None:
+        """Acknowledge callback query (no-op by default).
+
+        Override in adapters that support callback queries (e.g. Telegram).
+        """
+        pass  # default: no-op
+
+    async def aclose(self) -> None:
+        """Release underlying resources (HTTP connections, etc.).
+
+        No-op by default. Override in adapters that manage their own clients.
+        """
+        pass  # default: no-op

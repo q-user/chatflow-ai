@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.task_queue.tasks import (
     _estimator_module_stub,
-    _finance_module_stub,
+    _finance_module_handler,
     _get_module_handler,
 )
 
@@ -60,7 +60,7 @@ def _make_snapshot(
     user_id: uuid.UUID | None = None,
     company_id: uuid.UUID | None = None,
     bot_instance_id: uuid.UUID | None = None,
-    module_type: str = "finance",
+    module_type: str = "estimator",
     items: list[dict] | None = None,
 ) -> dict:
     """Create a snapshot dict for compile_session."""
@@ -100,7 +100,12 @@ def _run_compile_logic(snapshot: dict, session: Session) -> dict:
 
     # 2. Dispatch to module handler
     handler = _get_module_handler(snapshot["module_type"])
-    result = handler(snapshot.get("items", []))
+    result = handler(
+        items=snapshot.get("items", []),
+        module_config=None,
+        bot_token=snapshot.get("bot_token"),
+        messenger_type=snapshot.get("messenger_type"),
+    )
 
     # 3. Update Project status
     project.status = "completed"
@@ -132,7 +137,7 @@ def test_compile_session_creates_project():
         project = session.get(ProjectTable, result["project_id"])
         assert project is not None
         assert project.status == "completed"
-        assert project.module_type == "finance"
+        assert project.module_type == "estimator"
     finally:
         session.close()
 
@@ -140,6 +145,27 @@ def test_compile_session_creates_project():
 def test_compile_session_finance_module():
     """compile_session with finance module → result_data has module='finance'."""
     _skip_if_no_db()
+
+    # Mock AI to avoid real API calls
+    import infrastructure.task_queue.tasks as tasks_module
+
+    async def _fake_ai_generate(
+        sp: str, txt: str, image_paths: list[str] | None = None
+    ) -> dict:
+        return {
+            "rows": [
+                {
+                    "date": "2024-01-01",
+                    "description": "Test",
+                    "category": "income",
+                    "amount": 1000,
+                    "currency": "USD",
+                }
+            ]
+        }
+
+    original_ai_generate = tasks_module._ai_generate_json
+    tasks_module._ai_generate_json = _fake_ai_generate  # ty: ignore[invalid-assignment]
 
     session = _make_sync_session()
     try:
@@ -155,6 +181,7 @@ def test_compile_session_finance_module():
         assert project.result_data["items_processed"] == 1
     finally:
         session.close()
+        tasks_module._ai_generate_json = original_ai_generate
 
 
 def test_compile_session_estimator_module():
@@ -217,8 +244,8 @@ def test_compile_session_completed_at_set():
 
 
 def test_get_module_handler_valid():
-    """_get_module_handler returns correct stub for known types."""
-    assert _get_module_handler("finance") is _finance_module_stub
+    """_get_module_handler returns correct handlers for known types."""
+    assert _get_module_handler("finance") is _finance_module_handler
     assert _get_module_handler("estimator") is _estimator_module_stub
 
 

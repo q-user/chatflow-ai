@@ -16,12 +16,16 @@ class IncomingEnvelope(BaseModel):
 
     messenger_user_id: str  # telegram_id / yandex_id
     chat_id: str  # chat/group ID for replies
-    text: str | None = None  # message text (or command)
+    text: str | None = None  # message text (or command / callback_data)
     file_id: str | None = None  # file ID in the messenger
     file_type: str | None = None  # MIME: "application/pdf", "image/png", etc.
     file_name: str | None = None  # original file name
     bot_instance_id: UUID | None = None  # set by router after parse
     messenger_type: MessengerType  # validated against allowed values
+    is_callback: bool = False  # True if from button press (callback_query)
+    raw_callback_id: str | None = (
+        None  # Telegram callback_query_id, None for non-callback
+    )
 
     @property
     def is_otp_pattern(self) -> bool:

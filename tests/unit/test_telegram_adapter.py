@@ -146,6 +146,58 @@ async def test_parse_webhook_edited_message(
     assert envelope.text == "Hello, bot!"
 
 
+@pytest.fixture
+def callback_query_payload() -> dict:
+    """Telegram webhook payload for a callback_query (button press)."""
+    return {
+        "update_id": 12348,
+        "callback_query": {
+            "id": "callback_query_id_123",
+            "from": {"id": 999888777, "is_bot": False, "first_name": "Test"},
+            "message": {
+                "message_id": 10,
+                "chat": {"id": 123456789, "type": "private"},
+                "date": 1234567890,
+                "text": "Original message",
+            },
+            "data": "/compile",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_callback_query(
+    adapter: TelegramAdapter, callback_query_payload: dict
+):
+    """callback_query → IncomingEnvelope with is_callback=True and raw_callback_id."""
+    envelope = await adapter.parse_webhook(callback_query_payload, "test_bot_token_123")
+
+    assert envelope.messenger_user_id == "999888777"
+    assert envelope.chat_id == "123456789"
+    assert envelope.text == "/compile"  # button payload → text
+    assert envelope.is_callback is True
+    assert envelope.raw_callback_id == "callback_query_id_123"
+    assert envelope.messenger_type == "TG"
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_callback_query_priority_over_message(
+    adapter: TelegramAdapter, callback_query_payload: dict
+):
+    """callback_query takes priority over message if both present."""
+    # Add a message to payload — callback_query should still win
+    callback_query_payload["message"] = {
+        "message_id": 99,
+        "from": {"id": 111},
+        "chat": {"id": 222},
+        "date": 1234567890,
+        "text": "Ignored message",
+    }
+    envelope = await adapter.parse_webhook(callback_query_payload, "token")
+    assert envelope.is_callback is True
+    assert envelope.text == "/compile"
+
+
 # ──────────────────────────────────────────────
 # IncomingEnvelope property tests
 # ──────────────────────────────────────────────

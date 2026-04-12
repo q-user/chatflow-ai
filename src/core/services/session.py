@@ -18,6 +18,8 @@ class SessionSnapshot(BaseModel):
     module_type: str | None = None  # filled by hook_router
     chat_id: str | None = None  # filled by hook_router — where to send result
     messenger_type: str | None = None  # filled by hook_router — which adapter to use
+    bot_token: str | None = None  # filled by hook_router — for delivery
+    bot_config: dict | None = None  # filled by hook_router — for module handlers
     items: list[dict]  # [{"text": ..., "file_path": ..., "file_type": ...}]
 
 

@@ -48,17 +48,31 @@ class TelegramAdapter(IMessengerAdapter):
     async def parse_webhook(self, payload: dict, bot_token: str) -> IncomingEnvelope:
         """Parse Telegram Update object → IncomingEnvelope.
 
-        Handles: text messages, documents, photos, and captions.
+        Handles: callback_query, text messages, documents, photos, captions.
         bot_instance_id is set to placeholder — the router injects the real value.
 
         :param payload: Raw Telegram webhook payload (Update object).
         :param bot_token: Bot API token (used for validation).
         :returns: Parsed IncomingEnvelope.
-        :raises ValueError: If payload has no message or required fields.
+        :raises ValueError: If payload has no message or callback_query.
         """
+        # 1. Check callback_query FIRST (priority over message)
+        if "callback_query" in payload:
+            cq = payload["callback_query"]
+            return IncomingEnvelope(
+                messenger_user_id=str(cq["from"]["id"]),
+                chat_id=str(cq["message"]["chat"]["id"]),
+                text=cq["data"],  # button payload → text
+                bot_instance_id=uuid.uuid4(),
+                messenger_type="TG",
+                is_callback=True,
+                raw_callback_id=str(cq["id"]),
+            )
+
+        # 2. Existing logic for message / edited_message
         message = payload.get("message") or payload.get("edited_message", {})
         if not message:
-            raise ValueError("No message in webhook payload")
+            raise ValueError("No message or callback_query in webhook payload")
 
         chat_id = str(message["chat"]["id"])
         messenger_user_id = str(message["from"]["id"])
@@ -93,18 +107,36 @@ class TelegramAdapter(IMessengerAdapter):
             messenger_type="TG",
         )
 
-    async def send_text(self, chat_id: str, text: str) -> None:
+    async def send_text(
+        self,
+        chat_id: str,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+    ) -> None:
         """Send a text message via /sendMessage.
 
         :param chat_id: Target chat ID.
         :param text: Message text.
+        :param buttons: Optional inline keyboard rows.
         :raises httpx.HTTPStatusError: If API returns an error.
         """
         http = await self._get_http_client()
         url = self.BASE_URL.format(token=self._bot_token) + "/sendMessage"
-        response = await http.post(
-            url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        )
+
+        body: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+
+        if buttons:
+            keyboard = [
+                [{"text": btn["text"], "callback_data": btn["payload"]} for btn in row]
+                for row in buttons
+            ]
+            body["reply_markup"] = {"inline_keyboard": keyboard}
+
+        response = await http.post(url, json=body)
         response.raise_for_status()
 
     async def send_file(
@@ -156,3 +188,13 @@ class TelegramAdapter(IMessengerAdapter):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(download_response.content)
         return str(dest)
+
+    async def answer_callback(self, callback_id: str) -> None:
+        """Answer callback query to dismiss loading state on button.
+
+        :param callback_id: Telegram callback_query ID.
+        """
+        http = await self._get_http_client()
+        url = self.BASE_URL.format(token=self._bot_token) + "/answerCallbackQuery"
+        response = await http.post(url, json={"callback_query_id": callback_id})
+        response.raise_for_status()

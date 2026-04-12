@@ -261,9 +261,23 @@ def mock_adapter() -> IMessengerAdapter:
 
     async def fake_parse_webhook(payload: dict, bot_token: str) -> IncomingEnvelope:
         """Return a realistic IncomingEnvelope from Telegram payload."""
+        # 1. Check callback_query FIRST (priority over message)
+        if "callback_query" in payload:
+            cq = payload["callback_query"]
+            return IncomingEnvelope(
+                messenger_user_id=str(cq["from"]["id"]),
+                chat_id=str(cq["message"]["chat"]["id"]),
+                text=cq["data"],
+                bot_instance_id=uuid.uuid4(),
+                messenger_type="TG",
+                is_callback=True,
+                raw_callback_id=str(cq["id"]),
+            )
+
+        # 2. Existing logic for message / edited_message
         message = payload.get("message") or payload.get("edited_message", {})
         if not message:
-            raise ValueError("No message in webhook payload")
+            raise ValueError("No message or callback_query in webhook payload")
 
         chat_id = str(message["chat"]["id"])
         messenger_user_id = str(message["from"]["id"])
@@ -297,6 +311,7 @@ def mock_adapter() -> IMessengerAdapter:
     adapter.send_text = AsyncMock()
     adapter.send_file = AsyncMock()
     adapter.download_file = AsyncMock()
+    adapter.answer_callback = AsyncMock()
 
     return adapter
 

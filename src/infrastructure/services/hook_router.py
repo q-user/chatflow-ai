@@ -157,6 +157,10 @@ class HookRouterService:
         adapter: IMessengerAdapter,
     ) -> None:
         """Route to SessionService based on command/payload."""
+        # Answer callback first (dismiss button loading state)
+        if envelope.is_callback and envelope.raw_callback_id:
+            await adapter.answer_callback(envelope.raw_callback_id)
+
         state = await self._session_service.get_state(user.id)
 
         if envelope.is_command:
@@ -186,6 +190,8 @@ class HookRouterService:
                         "module_type": bot.module_type,
                         "chat_id": envelope.chat_id,
                         "messenger_type": envelope.messenger_type,
+                        "bot_token": bot.token,
+                        "bot_config": bot.config,
                     }
                 )
 
