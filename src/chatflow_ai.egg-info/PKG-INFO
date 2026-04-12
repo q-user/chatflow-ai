@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: chatflow-ai
+Version: 0.1.0
+Summary: AI-powered chat workflow engine built on FastAPI
+Requires-Python: >=3.14
+License-File: LICENSE
+Requires-Dist: alembic>=1.18.4
+Requires-Dist: asyncpg>=0.31.0
+Requires-Dist: celery>=5.6.3
+Requires-Dist: fastapi>=0.135.2
+Requires-Dist: fastapi-users[sqlalchemy]>=14.0
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: pydantic[email]>=2.12.5
+Requires-Dist: pydantic-settings>=2.13.1
+Requires-Dist: redis>=7.4.0
+Requires-Dist: sqlalchemy>=2.0.48
+Requires-Dist: uvicorn[standard]>=0.42.0
+Dynamic: license-file

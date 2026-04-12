@@ -174,16 +174,32 @@ class HookRouterService:
                     )
                     return
 
-                # Fill in missing fields from bot context
-                snapshot.company_id = uuid.UUID(str(user.company_id))  # noqa: PLW2901
-                snapshot.bot_instance_id = uuid.UUID(str(bot.id))  # noqa: PLW2901
-                snapshot.module_type = bot.module_type
+                # Fill in missing fields from bot context using model_copy (immutable pattern)
+                snapshot = snapshot.model_copy(update={
+                    "company_id": user.company_id,
+                    "bot_instance_id": bot.id,
+                    "module_type": bot.module_type,
+                    "chat_id": envelope.chat_id,
+                    "messenger_type": envelope.messenger_type,
+                })
 
-                # TODO: enqueue to Celery for processing
-                await adapter.send_text(
-                    envelope.chat_id,
-                    f"Принято {len(snapshot.items)} элементов. Обрабатываю...",
-                )
+                # Enqueue to Celery for async processing
+                try:
+                    from infrastructure.task_queue.celery_app import celery_app
+                    celery_app.send_task(
+                        "compile_session",
+                        kwargs={"snapshot": snapshot.model_dump(mode="json")},
+                    )
+                    await adapter.send_text(
+                        envelope.chat_id,
+                        f"Принято {len(snapshot.items)} элементов. Обрабатываю...",
+                    )
+                except Exception as e:
+                    logger.exception("Failed to enqueue Celery task: %s", e)
+                    await adapter.send_text(
+                        envelope.chat_id,
+                        "Ошибка очереди задач. Попробуйте позже.",
+                    )
                 return
 
             await adapter.send_text(

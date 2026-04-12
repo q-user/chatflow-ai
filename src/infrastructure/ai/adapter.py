@@ -171,8 +171,12 @@ class OpenRouterAdapter(IMultiModalAI):
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
         }
+
+        logger.debug(
+            "AI API call: model=%s, messages=%d, json_mode=%s",
+            self._model, len(messages), json_mode,
+        )
 
         body: dict[str, Any] = {
             "model": self._model,
@@ -205,18 +209,24 @@ class OpenRouterAdapter(IMultiModalAI):
         try:
             return response["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as e:
+            logger.warning("Unexpected API response structure: %s", list(response.keys()))
             raise AIServiceError("Unexpected API response structure") from e
 
     @staticmethod
     def _strip_thinking(content: str) -> str:
         """Remove Gemma 4 CoT thinking block from response.
 
-        Gemma 4 with <|think|> wraps reasoning in `````` tags.
+        Gemma 4 with <|think|> wraps reasoning in ```<think>...</think>` tags.
         The actual answer follows after the closing tag.
+        
+        Handles unclosed thinking blocks (model ran out of tokens).
         """
         think_end_tag = "</think>"
         if think_end_tag in content:
             return content.split(think_end_tag, 1)[-1].strip()
+        if content.strip().startswith("<|think|>"):
+            # Unclosed thinking — model ran out of tokens
+            return ""
         return content
 
     # ──────────────────────────────────────────────
@@ -225,10 +235,17 @@ class OpenRouterAdapter(IMultiModalAI):
 
     @staticmethod
     def _encode_image(path: str) -> str:
-        """Read and base64-encode a local image file."""
+        """Read and base64-encode a local image file.
+        
+        Raises AIServiceError if file is not found or exceeds size limit.
+        """
+        MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
         file_path = Path(path)
         if not file_path.exists():
             raise AIServiceError(f"Image file not found: {path}")
+        size = file_path.stat().st_size
+        if size > MAX_IMAGE_SIZE:
+            raise AIServiceError(f"Image file too large: {size} bytes (max {MAX_IMAGE_SIZE})")
         return base64.b64encode(file_path.read_bytes()).decode("utf-8")
 
     @staticmethod
@@ -241,5 +258,6 @@ class OpenRouterAdapter(IMultiModalAI):
             ".png": "image/png",
             ".gif": "image/gif",
             ".webp": "image/webp",
+            ".pdf": "application/pdf",
         }
         return mime_map.get(ext, "application/octet-stream")
