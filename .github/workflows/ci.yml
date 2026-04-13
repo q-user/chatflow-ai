@@ -34,7 +34,7 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type check
-        run: uv run mypy src/
+        run: uv run ty check src/
       - name: Run Tests
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/smarthunt_test_db
