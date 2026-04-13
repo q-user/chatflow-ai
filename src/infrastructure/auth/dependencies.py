@@ -6,7 +6,7 @@ from fastapi_users import FastAPIUsers
 from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from infrastructure.auth.backend import auth_backend
+from infrastructure.auth.backend import auth_backend, auth_backend_cookie
 from infrastructure.auth.manager import UserManager
 from infrastructure.auth.schemas import UserCreate, UserUpdate
 from infrastructure.database.models.user import UserTable
@@ -33,12 +33,19 @@ UserCreateSchema = UserCreate
 UserUpdateSchema = UserUpdate
 
 
-# FastAPIUsers instance — создаёт все зависимости для получения текущего пользователя
+# FastAPIUsers instance — регистрируем ОБА бэкенда
 fastapi_users = FastAPIUsers[UserTable, uuid.UUID](
     get_user_manager,
-    [auth_backend],
+    [auth_backend, auth_backend_cookie],
 )
 
 
 # Зависимость для получения активного пользователя
+# Пробует оба бэкенда: Bearer (API) и Cookie (Web Dashboard)
 current_active_user = fastapi_users.current_user(active=True)
+
+# Cookie-only — для Web Dashboard роутов
+# Note: fastapi-users не поддерживает auth_backend param в current_user,
+# поэтому current_active_user_cookie = current_active_user (проверка по обоим бэкендам).
+# Web-роуты дополнительно защищены тем, что кука httponly и браузер не отправит Bearer.
+current_active_user_cookie = current_active_user

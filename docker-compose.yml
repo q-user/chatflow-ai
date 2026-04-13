@@ -1,4 +1,28 @@
 services:
+  caddy:
+    image: docker.io/library/caddy:2-alpine
+    container_name: cfai_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    environment:
+      - DOMAIN=${DOMAIN:-194.87.69.220.nip.io}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
   db:
     image: docker.io/library/postgres:18-alpine
     container_name: cfai_db
@@ -38,11 +62,12 @@ services:
     image: ghcr.io/q-user/chatflow-ai:latest
     container_name: cfai_api
     restart: always
+    env_file:
+      - .env
     command: >
       sh -c "alembic upgrade head && uvicorn presentation.api.main:app --host 0.0.0.0 --port 8000"
 
-    ports:
-      - "8000:8000"
+    # FastAPI доступен только внутри Docker network через Caddy
     depends_on:
       db:
         condition: service_healthy
@@ -80,3 +105,5 @@ services:
           memory: 256M
 volumes:
   db-data:
+  caddy-data:
+  caddy-config:

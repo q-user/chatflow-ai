@@ -1,0 +1,17 @@
+{$DOMAIN:194.87.69.220.nip.io} {
+    reverse_proxy api:8000 {
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+        }
+    }
+
+    # Логирование
+    log {
+        output stdout
+        format json
+    }
+
+    # Сжатие
+    encode gzip
+}

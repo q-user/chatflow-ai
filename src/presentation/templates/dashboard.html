@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — ChatFlow AI{% endblock %}
+
+{% block content %}
+<div class="min-h-full">
+  <!-- Navbar -->
+  <nav class="bg-indigo-600">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <h1 class="text-white text-xl font-bold">ChatFlow AI</h1>
+        <form hx-post="/auth/cookie/logout" hx-swap="none">
+          <button type="submit" class="text-indigo-200 hover:text-white text-sm">
+            Выйти
+          </button>
+        </form>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <!-- User info -->
+    <div class="mb-8 rounded-lg bg-white p-6 shadow">
+      <h2 class="text-lg font-semibold text-gray-900">Профиль</h2>
+      <dl class="mt-4 grid grid-cols-2 gap-4 text-sm">
+        <dt class="text-gray-500">Email</dt>
+        <dd class="text-gray-900">{{ user.email }}</dd>
+        <dt class="text-gray-500">Company ID</dt>
+        <dd class="text-gray-900 font-mono text-xs">{{ user.company_id }}</dd>
+      </dl>
+    </div>
+
+    <!-- Bot list -->
+    <div class="rounded-lg bg-white p-6 shadow">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-gray-900">Боты</h2>
+        <!-- Add bot button → shows form -->
+        <button hx-get="/bots/add"
+                hx-target="#bot-form-container"
+                hx-swap="innerHTML"
+                class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+          + Добавить бота
+        </button>
+      </div>
+
+      <!-- Bot form placeholder (HTMX will inject form here) -->
+      <div id="bot-form-container"></div>
+
+      <!-- Bot table (HTMX will swap this after bot creation) -->
+      <div id="bot-table">
+        {% include "partials/bot_table.html" %}
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

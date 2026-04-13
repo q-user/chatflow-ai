@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Вход — ChatFlow AI{% endblock %}
+
+{% block content %}
+<div class="flex min-h-full flex-col justify-center px-6 py-12">
+  <div class="sm:mx-auto sm:w-full sm:max-w-sm">
+    <h2 class="text-center text-2xl font-bold tracking-tight text-gray-900">
+      ChatFlow AI
+    </h2>
+  </div>
+
+  <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+    <!-- HTMX login form -->
+    <form hx-post="/auth/cookie/login"
+          hx-swap="none"
+          class="space-y-6">
+
+      <div>
+        <label for="username" class="block text-sm font-medium text-gray-900">Email</label>
+        <input type="email" name="username" id="username" required
+               class="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-600 focus:ring-indigo-600">
+      </div>
+
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-900">Пароль</label>
+        <input type="password" name="password" id="password" required
+               class="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-600 focus:ring-indigo-600">
+      </div>
+
+      <!-- Error message placeholder -->
+      <div id="error-msg"></div>
+
+      <button type="submit"
+              class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+        Войти
+      </button>
+    </form>
+
+    <!-- HTMX error handling: on 4xx response, show error -->
+    <script>
+      document.querySelector('form').addEventListener('htmx:responseError', function(event) {
+        document.getElementById('error-msg').innerHTML =
+          '<p class="text-sm text-red-600">Неверный email или пароль</p>';
+      });
+    </script>
+  </div>
+</div>
+{% endblock %}
