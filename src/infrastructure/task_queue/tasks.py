@@ -158,10 +158,8 @@ def _finance_module_handler(
     :raises ValueError: If no text data or AI returned no rows.
     :raises AIServiceError: If AI call fails.
     """
-    # 1. Concatenate text from items
+    # 1. Concatenate text from items (may be empty if only media)
     text_chunks = [item.get("text", "") for item in items if item.get("text")]
-    if not text_chunks:
-        raise ValueError("No text data in items for finance processing")
     combined_text = "\n---\n".join(text_chunks)
 
     # 2. System prompt: from config or fallback
@@ -169,14 +167,12 @@ def _finance_module_handler(
         "system_prompt"
     ) or FINANCE_FALLBACK_PROMPT
 
-    # 3. Filter image items
+    # 3. Filter ALL file items (not just images)
     file_items = [
-        item
-        for item in items
-        if item.get("file_id") and item.get("file_type", "").startswith("image/")
+        item for item in items if item.get("file_id") and item.get("file_type")
     ]
 
-    # 4. Single event loop: download images + call AI
+    # 4. Single event loop: download + parse media + call AI
     result_json = asyncio.run(
         _finance_ai_pipeline(
             system_prompt,
@@ -230,32 +226,85 @@ def _hr_module_stub(
 # ──────────────────────────────────────────────
 
 
-async def _download_images(
-    file_items: list[dict], bot_token: str, messenger_type: str
-) -> list[str]:
-    """Download image files from messenger via adapter.
+async def _download_and_parse_media(
+    file_items: list[dict],
+    bot_token: str,
+    messenger_type: str,
+) -> tuple[str, list[str]]:
+    """Download all files, parse audio/docs to text, collect image paths.
+
+    Single async pipeline — one messenger adapter, one STT adapter,
+    proper resource cleanup via finally blocks.
 
     :param file_items: Items with file_id and file_type.
     :param bot_token: Bot API token.
     :param messenger_type: "TG", "YM", etc.
-    :returns: List of local file paths.
+    :returns: Tuple of (parsed_text, image_paths).
+        parsed_text: Concatenated text from audio transcriptions + document parsing.
+        image_paths: Local paths to downloaded image files for Vision.
     """
+    from infrastructure.parsers import process_document
+    # lazy STT init
+
     adapter = create_adapter(messenger_type, bot_token)
-    paths: list[str] = []
+    stt = None
+    parsed_parts: list[str] = []
+    image_paths: list[str] = []
+
     try:
         for item in file_items:
             file_id = item["file_id"]
-            ext = _mime_to_ext(item.get("file_type", "image/jpeg"))
-            # TODO: cleanup downloaded images after AI processing (L1)
-            dest = os.path.join("/tmp", f"img_{uuid.uuid4().hex[:8]}{ext}")
+            file_type = item.get("file_type")
+            category = _classify_file(file_type)
+            ext = _mime_to_ext(file_type or "application/octet-stream")
+            prefix = {
+                "image": "img",
+                "audio": "audio",
+                "document": "doc",
+                "unknown": "file",
+            }
+            dest = os.path.join(
+                "/tmp", f"{prefix[category]}_{uuid.uuid4().hex[:8]}{ext}"
+            )
+
+            # Download
             try:
-                path = await adapter.download_file(file_id, dest)
-                paths.append(path)
+                local_path = await adapter.download_file(file_id, dest)
             except Exception:
                 logger.warning("Failed to download file %s, skipping", file_id)
+                continue
+
+            # Route by category
+            try:
+                if category == "image":
+                    image_paths.append(local_path)
+                elif category == "audio":
+                    if stt is None:
+                        # lazy STT init
+                        from infrastructure.stt import create_stt_adapter
+
+                        stt = create_stt_adapter()
+                    text = await stt.transcribe(local_path)
+                    if text:
+                        parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
+                elif category == "document":
+                    text = process_document(local_path, file_type)
+                    if text:
+                        parsed_parts.append(f"[Содержимое документа]:\n{text}")
+                else:
+                    logger.warning("Unknown file category for %s, skipping", file_id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to parse file %s (%s): %s", file_id, category, exc
+                )
+
     finally:
         await adapter.aclose()
-    return paths
+        if stt is not None:
+            await stt.aclose()
+
+    parsed_text = "\n\n".join(parsed_parts)
+    return parsed_text, image_paths
 
 
 async def _finance_ai_pipeline(
@@ -265,29 +314,68 @@ async def _finance_ai_pipeline(
     bot_token: str | None,
     messenger_type: str | None,
 ) -> dict:
-    """Single async pipeline: download images + call AI.
-
-    Uses one event loop instead of two separate asyncio.run() calls.
-    """
+    """Single async pipeline: download + parse media + call AI."""
     image_paths: list[str] | None = None
+    media_text = ""
+
     if file_items and bot_token and messenger_type:
-        image_paths = await _download_images(file_items, bot_token, messenger_type)
-        # Normalize: [] → None (semantically clearer for text-only mode)
+        media_text, image_paths = await _download_and_parse_media(
+            file_items, bot_token, messenger_type
+        )
         image_paths = image_paths or None
-    return await _ai_generate_json(
-        system_prompt, combined_text, image_paths=image_paths
-    )
+
+    # Merge text from messages + parsed media
+    if media_text:
+        full_text = f"{combined_text}\n\n{media_text}" if combined_text else media_text
+    else:
+        full_text = combined_text
+
+    if not full_text:
+        raise ValueError("No text data (neither messages nor media) for processing")
+
+    return await _ai_generate_json(system_prompt, full_text, image_paths=image_paths)
 
 
 def _mime_to_ext(mime: str) -> str:
-    """Map MIME type to file extension for image files."""
+    """Map MIME type to file extension."""
     mapping = {
+        # Images
         "image/jpeg": ".jpg",
         "image/png": ".png",
         "image/gif": ".gif",
         "image/webp": ".webp",
+        # Audio
+        "audio/ogg": ".ogg",
+        "audio/mpeg": ".mp3",
+        "audio/mp4": ".m4a",
+        "audio/wav": ".wav",
+        "audio/webm": ".webm",
+        "audio/x-opus": ".opus",
+        # Documents
+        "application/pdf": ".pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     }
-    return mapping.get(mime, ".jpg")
+    return mapping.get(mime, ".bin")
+
+
+def _classify_file(file_type: str | None) -> str:
+    """Classify file by MIME type.
+
+    :param file_type: MIME type string or None.
+    :returns: "image" | "audio" | "document" | "unknown"
+    """
+    if not file_type:
+        return "unknown"
+    if file_type.startswith("image/"):
+        return "image"
+    if file_type.startswith("audio/"):
+        return "audio"
+    if file_type in (
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ):
+        return "document"
+    return "unknown"
 
 
 async def _ai_generate_json(

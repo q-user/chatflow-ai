@@ -207,40 +207,81 @@ def test_deliver_artifact_missing_fields():
 
 
 # ──────────────────────────────────────────────
-# _mime_to_ext tests (Ticket 3.6)
+# _mime_to_ext tests (Ticket 4.3)
 # ──────────────────────────────────────────────
 
 
 def test_mime_to_ext_known_types():
-    """_mime_to_ext maps known image MIME types to extensions."""
+    """_mime_to_ext maps known MIME types to extensions."""
     from infrastructure.task_queue.tasks import _mime_to_ext
 
+    # Images
     assert _mime_to_ext("image/jpeg") == ".jpg"
     assert _mime_to_ext("image/png") == ".png"
     assert _mime_to_ext("image/gif") == ".gif"
     assert _mime_to_ext("image/webp") == ".webp"
+    # Audio
+    assert _mime_to_ext("audio/ogg") == ".ogg"
+    assert _mime_to_ext("audio/mpeg") == ".mp3"
+    assert _mime_to_ext("audio/wav") == ".wav"
+    # Documents
+    assert _mime_to_ext("application/pdf") == ".pdf"
 
 
 def test_mime_to_ext_unknown_type():
-    """_mime_to_ext defaults to .jpg for unknown MIME types."""
+    """_mime_to_ext defaults to .bin for unknown MIME types."""
     from infrastructure.task_queue.tasks import _mime_to_ext
 
-    assert _mime_to_ext("application/pdf") == ".jpg"
-    assert _mime_to_ext("image/svg") == ".jpg"  # not in mapping
+    assert _mime_to_ext("unknown/type") == ".bin"
+    assert _mime_to_ext("text/plain") == ".bin"
 
 
 # ──────────────────────────────────────────────
-# _download_images tests (Ticket 3.6)
+# _classify_file tests (Ticket 4.3)
+# ──────────────────────────────────────────────
+
+
+def test_classify_file_image():
+    """_classify_file returns 'image' for image MIME types."""
+    from infrastructure.task_queue.tasks import _classify_file
+
+    assert _classify_file("image/jpeg") == "image"
+
+
+def test_classify_file_audio():
+    """_classify_file returns 'audio' for audio MIME types."""
+    from infrastructure.task_queue.tasks import _classify_file
+
+    assert _classify_file("audio/ogg") == "audio"
+
+
+def test_classify_file_document():
+    """_classify_file returns 'document' for document MIME types."""
+    from infrastructure.task_queue.tasks import _classify_file
+
+    assert _classify_file("application/pdf") == "document"
+
+
+def test_classify_file_unknown():
+    """_classify_file returns 'unknown' for unrecognised MIME types."""
+    from infrastructure.task_queue.tasks import _classify_file
+
+    assert _classify_file("text/plain") == "unknown"
+    assert _classify_file(None) == "unknown"
+
+
+# ──────────────────────────────────────────────
+# _download_and_parse_media tests (Ticket 4.3)
 # ──────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_download_images_success():
-    """_download_images downloads files and returns paths."""
-    from infrastructure.task_queue.tasks import _download_images
+async def test_download_and_parse_media_images_only():
+    """_download_and_parse_media with only images returns empty text + image paths."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
 
     mock_adapter = AsyncMock()
-    mock_adapter.download_file = AsyncMock(return_value="/tmp/file_abc123.jpg")
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_abc123.jpg")
     mock_adapter.aclose = AsyncMock()
 
     file_items = [
@@ -248,32 +289,98 @@ async def test_download_images_success():
         {"file_id": "file2", "file_type": "image/png"},
     ]
 
-    with patch(
-        "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
     ):
-        paths = await _download_images(file_items, "test_token", "TG")
+        text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
 
+    assert text == ""
     assert len(paths) == 2
-    assert mock_adapter.download_file.call_count == 2
     mock_adapter.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_download_images_skip_failed():
-    """_download_images skips failed downloads and continues."""
-    from infrastructure.task_queue.tasks import _download_images
+async def test_download_and_parse_media_audio():
+    """_download_and_parse_media transcribes audio files."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
 
     mock_adapter = AsyncMock()
-    mock_adapter.download_file = AsyncMock(side_effect=Exception("Download failed"))
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio_abc123.ogg")
     mock_adapter.aclose = AsyncMock()
 
-    file_items = [{"file_id": "file1", "file_type": "image/jpeg"}]
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Привет мир")
+    mock_stt.aclose = AsyncMock()
 
-    with patch(
-        "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+    file_items = [{"file_id": "file1", "file_type": "audio/ogg"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
     ):
-        paths = await _download_images(file_items, "test_token", "TG")
+        text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
 
+    assert "[Транскрипция аудио]:" in text
+    assert "Привет мир" in text
+    assert paths == []
+    mock_adapter.aclose.assert_awaited_once()
+    mock_stt.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_document():
+    """_download_and_parse_media parses documents."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/doc_abc123.pdf")
+    mock_adapter.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.aclose = AsyncMock()
+
+    file_items = [{"file_id": "file1", "file_type": "application/pdf"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch(
+            "infrastructure.parsers.process_document",
+            return_value="Document content here",
+        ),
+    ):
+        text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
+
+    assert "[Содержимое документа]:" in text
+    assert "Document content here" in text
+    assert paths == []
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_skip_failed():
+    """_download_and_parse_media skips failed downloads."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(side_effect=Exception("fail"))
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "bad", "file_type": "image/jpeg"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+    ):
+        text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
+
+    assert text == ""
     assert paths == []
     mock_adapter.aclose.assert_awaited_once()
 

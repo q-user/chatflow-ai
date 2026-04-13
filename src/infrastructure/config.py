@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://openrouter.ai/api/v1"
     ai_model_name: str = "google/gemma-4-26b-a4b-it"  # default model
 
+    # STT Provider (OpenAI-compatible API format — Groq Cloud)
+    stt_api_key: str = ""
+    stt_base_url: str = "https://api.groq.com/openai/v1"
+    stt_model_name: str = "whisper-large-v3"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
