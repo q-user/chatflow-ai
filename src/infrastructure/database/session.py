@@ -7,25 +7,38 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.config import settings
 
-# ── Async engine (for FastAPI) ──
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
-)
+# ── Async engine (for FastAPI) — lazy init ──
+_async_engine: Any = None
+async_session_factory: async_sessionmaker[AsyncSession] | None = None
 
-async_session_factory = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+
+def get_async_engine():
+    """Lazily create async engine on first use."""
+    global _async_engine, async_session_factory
+
+    if _async_engine is None:
+        _async_engine = create_async_engine(
+            settings.database_url,
+            echo=settings.debug,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,
+        )
+        async_session_factory = async_sessionmaker(
+            bind=_async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+    return _async_engine
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, Any]:
     """FastAPI dependency that yields a database session."""
-    async with async_session_factory() as session:
+    get_async_engine()
+    factory = async_session_factory
+    assert factory is not None
+    async with factory() as session:
         try:
             yield session
             await session.commit()
