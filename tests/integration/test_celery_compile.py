@@ -12,8 +12,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.task_queue.tasks import (
-    _estimator_module_stub,
-    _finance_module_handler,
     _get_module_handler,
 )
 

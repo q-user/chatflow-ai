@@ -288,7 +288,10 @@ async def _download_and_parse_media(
                     if text:
                         parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
                 elif category == "document":
-                    text = process_document(local_path, file_type)
+                    if file_type:
+                        text = process_document(local_path, file_type)
+                    else:
+                        text = None
                     if text:
                         parsed_parts.append(f"[Содержимое документа]:\n{text}")
                 else:
@@ -438,12 +441,13 @@ def _deliver_artifact(snapshot: dict, artifact_path: str) -> None:
         logger.warning("Cannot deliver artifact: missing delivery fields in snapshot")
         return
 
-    adapter = create_adapter(messenger_type, bot_token)
+    # Type guards: all() ensures these are not None
+    adapter = create_adapter(str(messenger_type), str(bot_token))
 
     async def _send() -> None:
         try:
             await adapter.send_file(
-                chat_id=chat_id,
+                chat_id=str(chat_id),
                 file_path=artifact_path,
                 caption="Результат обработки готов ✅",
             )

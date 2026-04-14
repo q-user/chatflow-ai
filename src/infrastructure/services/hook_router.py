@@ -96,7 +96,7 @@ class HookRouterService:
         )
 
         # 6. Resolve user
-        user = await self._resolve_user(envelope, bot.company_id)
+        user = await self._resolve_user(envelope, uuid.UUID(str(bot.company_id)))
         if user is None:
             await self._handle_unknown_user(envelope, bot, adapter)
             return 200, "OK"

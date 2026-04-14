@@ -97,7 +97,7 @@ async def test_verify_otp_success(
     # Verify telegram_id was linked to the user who generated the OTP
     me_resp = await auth_client.get("/users/me")
     user_id = me_resp.json()["id"]
-    result = await db_session.execute(select(UserTable).where(UserTable.id == user_id))
+    result = await db_session.execute(select(UserTable).where(UserTable.id == user_id))  # type: ignore
     user = result.scalar_one()
     assert user.telegram_id == "telegram_12345"
 

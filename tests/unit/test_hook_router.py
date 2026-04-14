@@ -118,7 +118,7 @@ async def test_process_webhook_messenger_type_mismatch(
     """messenger_type doesn't match BotInstance → 403."""
     status_code, message = await hook_router.process_webhook(
         "YM",  # BotInstance is "TG"
-        test_bot_instance.id,
+        uuid.UUID(str(test_bot_instance.id)),
         {"message": {"chat": {"id": 123}, "from": {"id": 456}, "text": "hello"}},
     )
     assert status_code == 403
@@ -138,7 +138,7 @@ async def test_process_webhook_bot_inactive(
 
     status_code, message = await hook_router.process_webhook(
         "TG",
-        test_bot_instance.id,
+        uuid.UUID(str(test_bot_instance.id)),
         {"message": {"chat": {"id": 123}, "from": {"id": 456}, "text": "hello"}},
     )
     assert status_code == 403
@@ -156,7 +156,7 @@ async def test_process_webhook_invalid_payload(
 
     status_code, message = await hook_router.process_webhook(
         "TG",
-        test_bot_instance.id,
+        uuid.UUID(str(test_bot_instance.id)),
         {"update_id": 123},  # no message key
     )
     assert status_code == 400
@@ -184,7 +184,7 @@ async def test_process_webhook_unknown_user_non_otp(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -215,7 +215,7 @@ async def test_process_webhook_unknown_user_invalid_otp(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -260,7 +260,7 @@ async def test_process_webhook_unknown_user_valid_otp(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -302,7 +302,7 @@ async def test_process_webhook_known_user_command_new(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -334,7 +334,7 @@ async def test_process_webhook_known_user_command_compile(
             messenger_user_id=telegram_id,
             chat_id=telegram_id,
             text="some data",
-            bot_instance_id=test_bot_instance.id,
+            bot_instance_id=uuid.UUID(str(test_bot_instance.id)),
             messenger_type="TG",
         ),
     )
@@ -348,7 +348,7 @@ async def test_process_webhook_known_user_command_compile(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -380,7 +380,7 @@ async def test_process_webhook_known_user_command_compile_no_session(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -412,7 +412,7 @@ async def test_process_webhook_known_user_unknown_command(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -453,7 +453,7 @@ async def test_process_webhook_known_user_text_collecting(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 
@@ -485,7 +485,7 @@ async def test_process_webhook_known_user_text_idle(
     }
 
     status_code, message = await hook_router.process_webhook(
-        "TG", test_bot_instance.id, payload
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert status_code == 200
 

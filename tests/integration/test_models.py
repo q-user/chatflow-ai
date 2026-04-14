@@ -208,7 +208,7 @@ async def test_user_company_relationship(
 
     result = await db_session.execute(
         select(UserTable)
-        .where(UserTable.id == user.id)
+        .where(UserTable.id == user.id)  # type: ignore
         .options(selectinload(UserTable.company))
     )
     loaded_user = result.scalar_one()

@@ -22,7 +22,7 @@ def parse_docx(file_path: str) -> str:
     try:
         from docx import Document  # lazy import — optional dependency
 
-        doc = Document(path)
+        doc = Document(str(path))
         text_parts: list[str] = []
         for para in doc.paragraphs:
             if para.text.strip():
