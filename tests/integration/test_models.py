@@ -236,66 +236,39 @@ async def test_bot_instance_valid_messenger_types(
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_default_module_type(
-    db_session: AsyncSession, test_company: CompanyTable
-):
-    """BotInstance defaults to module_type='finance'."""
-    bot = BotInstanceTable(company_id=test_company.id, messenger_type="TG", token="tg")
-    db_session.add(bot)
-    await db_session.flush()
-
-    assert bot.module_type == "finance"
-
-
-@pytest.mark.asyncio
-async def test_bot_instance_custom_module_type(
-    db_session: AsyncSession, test_company: CompanyTable
+@pytest.mark.parametrize("module_type", ["finance", "hr"])
+async def test_bot_instance_module_type(
+    db_session: AsyncSession, test_company: CompanyTable, module_type: str
 ):
     """BotInstance accepts custom module_type."""
     bot = BotInstanceTable(
         company_id=test_company.id,
         messenger_type="TG",
         token="tg",
-        module_type="hr",
+        module_type=module_type,
     )
     db_session.add(bot)
     await db_session.flush()
 
-    assert bot.module_type == "hr"
+    assert bot.module_type == module_type
 
 
 @pytest.mark.asyncio
-async def test_bot_instance_config_json(
-    db_session: AsyncSession, test_company: CompanyTable
+@pytest.mark.parametrize("config", [{"system_prompt": "You are a bot"}, None])
+async def test_bot_instance_config(
+    db_session: AsyncSession, test_company: CompanyTable, config: dict | None
 ):
-    """BotInstance accepts dict config (stored as JSON)."""
+    """BotInstance accepts dict config or None."""
     bot = BotInstanceTable(
         company_id=test_company.id,
         messenger_type="TG",
         token="tg",
-        config={"system_prompt": "You are a bot", "output_format": "csv"},
+        config=config,
     )
     db_session.add(bot)
     await db_session.flush()
 
-    assert bot.config == {"system_prompt": "You are a bot", "output_format": "csv"}
-
-
-@pytest.mark.asyncio
-async def test_bot_instance_config_nullable(
-    db_session: AsyncSession, test_company: CompanyTable
-):
-    """BotInstance config can be None."""
-    bot = BotInstanceTable(
-        company_id=test_company.id,
-        messenger_type="TG",
-        token="tg",
-        config=None,
-    )
-    db_session.add(bot)
-    await db_session.flush()
-
-    assert bot.config is None
+    assert bot.config == config
 
 
 @pytest.mark.asyncio

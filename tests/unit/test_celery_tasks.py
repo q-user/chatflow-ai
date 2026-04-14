@@ -129,30 +129,19 @@ def test_write_csv_creates_file(tmp_path):
     assert rows[0]["amount"] == "100"
 
 
-def test_write_csv_empty_rows_raises():
-    """_write_csv raises ValueError when rows is empty."""
-    data = {"rows": []}
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"rows": []},
+        {"other_key": "value"},
+    ],
+)
+def test_write_csv_missing_rows_raises(data):
+    """_write_csv raises ValueError when rows is empty or missing."""
     with patch("infrastructure.task_queue.tasks.uuid.uuid4") as mock_uuid:
         mock_uuid.return_value.hex = "abc123"
-        try:
+        with pytest.raises(ValueError, match="no rows"):
             _write_csv(data)
-        except ValueError as e:
-            assert "no rows" in str(e).lower()
-        else:
-            raise AssertionError("Expected ValueError")
-
-
-def test_write_csv_no_rows_key_raises():
-    """_write_csv raises ValueError when 'rows' key is missing."""
-    data = {"other_key": "value"}
-    with patch("infrastructure.task_queue.tasks.uuid.uuid4") as mock_uuid:
-        mock_uuid.return_value.hex = "abc123"
-        try:
-            _write_csv(data)
-        except ValueError as e:
-            assert "no rows" in str(e).lower()
-        else:
-            raise AssertionError("Expected ValueError")
 
 
 # ──────────────────────────────────────────────
@@ -500,3 +489,114 @@ async def test_finance_ai_pipeline_all_images_fail():
     call_kwargs = mock_ai.generate_json.call_args[1]
     # [] → None normalization
     assert call_kwargs["image_paths"] is None
+
+
+@pytest.mark.asyncio
+async def test_finance_ai_pipeline_with_audio():
+    """_finance_ai_pipeline transcribes audio and merges with text."""
+    from infrastructure.task_queue.tasks import _finance_ai_pipeline
+
+    mock_ai = AsyncMock()
+    mock_ai.generate_json = AsyncMock(return_value={"rows": [{"a": 1}]})
+    mock_ai.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Audio transcription text")
+    mock_stt.aclose = AsyncMock()
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio.ogg")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "audio_1", "file_type": "audio/ogg"}]
+
+    with (
+        patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+    ):
+        result = await _finance_ai_pipeline(
+            "prompt", "User message", file_items, "test_token", "TG"
+        )
+
+    assert result == {"rows": [{"a": 1}]}
+    mock_stt.transcribe.assert_awaited_once_with("/tmp/audio.ogg")
+    call_kwargs = mock_ai.generate_json.call_args[1]
+    assert "Транскрипция аудио" in call_kwargs["text"]
+    mock_ai.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_finance_ai_pipeline_with_document():
+    """_finance_ai_pipeline extracts text from document and merges with text."""
+    from infrastructure.task_queue.tasks import _finance_ai_pipeline
+
+    mock_ai = AsyncMock()
+    mock_ai.generate_json = AsyncMock(return_value={"rows": [{"a": 1}]})
+    mock_ai.aclose = AsyncMock()
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/doc.pdf")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "doc_1", "file_type": "application/pdf"}]
+
+    with (
+        patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch(
+            "infrastructure.parsers.process_document", return_value="Extracted doc text"
+        ),
+    ):
+        result = await _finance_ai_pipeline(
+            "prompt", "User message", file_items, "test_token", "TG"
+        )
+
+    assert result == {"rows": [{"a": 1}]}
+    call_kwargs = mock_ai.generate_json.call_args[1]
+    assert "Содержимое документа" in call_kwargs["text"]
+    mock_ai.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_finance_ai_pipeline_with_audio_and_document():
+    """_finance_ai_pipeline merges audio transcription + document text."""
+    from infrastructure.task_queue.tasks import _finance_ai_pipeline
+
+    mock_ai = AsyncMock()
+    mock_ai.generate_json = AsyncMock(return_value={"rows": [{"a": 1}]})
+    mock_ai.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Spoken words")
+    mock_stt.aclose = AsyncMock()
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(side_effect=lambda fid, dest: dest)
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [
+        {"file_id": "audio_1", "file_type": "audio/ogg"},
+        {"file_id": "doc_1", "file_type": "application/pdf"},
+    ]
+
+    with (
+        patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch("infrastructure.parsers.process_document", return_value="Doc text"),
+    ):
+        result = await _finance_ai_pipeline(
+            "prompt", "User message", file_items, "test_token", "TG"
+        )
+
+    assert result == {"rows": [{"a": 1}]}
+    call_kwargs = mock_ai.generate_json.call_args[1]
+    assert "Транскрипция аудио" in call_kwargs["text"]
+    assert "Содержимое документа" in call_kwargs["text"]

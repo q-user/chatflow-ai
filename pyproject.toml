@@ -29,6 +29,7 @@ dev = [
     "psycopg2-binary>=2.9.10",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-cov>=6.1.1",
     "pytest-httpx>=0.36.2",
     "ruff>=0.15.8",
     "ty>=0.0.26",
@@ -53,6 +54,15 @@ root = ["src"]
 [tool.ty.rules]
 # Allow forward references in string form (standard SQLAlchemy pattern)
 unresolved-reference = "warn"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
 
 # SQLAlchemy comparison expressions return bool at runtime
 # but type as ColumnElement[bool] — expected behavior

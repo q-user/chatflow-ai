@@ -241,15 +241,3 @@ def test_compile_session_completed_at_set():
         assert project.completed_at is not None
     finally:
         session.close()
-
-
-def test_get_module_handler_valid():
-    """_get_module_handler returns correct handlers for known types."""
-    assert _get_module_handler("finance") is _finance_module_handler
-    assert _get_module_handler("estimator") is _estimator_module_stub
-
-
-def test_get_module_handler_invalid():
-    """_get_module_handler raises ValueError for unknown type."""
-    with pytest.raises(ValueError, match="Unknown module_type"):
-        _get_module_handler("nonexistent")

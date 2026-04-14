@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from core.interfaces.ai import AIServiceError
@@ -95,6 +96,7 @@ def test_guess_mime():
     assert OpenRouterAdapter._guess_mime("image.png") == "image/png"
     assert OpenRouterAdapter._guess_mime("anim.gif") == "image/gif"
     assert OpenRouterAdapter._guess_mime("pic.webp") == "image/webp"
+    assert OpenRouterAdapter._guess_mime("doc.pdf") == "application/pdf"
     assert OpenRouterAdapter._guess_mime("data.bin") == "application/octet-stream"
 
 
@@ -132,8 +134,15 @@ def test_strip_thinking_without_cot():
 
 
 def test_strip_thinking_empty_after():
-    """CoT with no answer after → empty string."""
-    content = " reasoning</think>"
+    """Unclosed think tag → empty string."""
+    content = "<|think|>\n reasoning"
+    result = OpenRouterAdapter._strip_thinking(content)
+    assert result == ""
+
+
+def test_strip_thinking_unclosed():
+    """Unclosed think tag with no closing tag → empty string."""
+    content = "<|think|>\n reasoning here\n# Header"
     result = OpenRouterAdapter._strip_thinking(content)
     assert result == ""
 
@@ -212,36 +221,26 @@ async def test_generate_text_valid(adapter: OpenRouterAdapter):
 
 
 @pytest.mark.asyncio
-async def test_call_api_timeout(adapter: OpenRouterAdapter):
-    """Timeout → AIServiceError."""
-    import httpx
-
+@pytest.mark.parametrize(
+    "side_effect,match",
+    [
+        (httpx.TimeoutException("timeout"), "timeout"),
+        (
+            httpx.HTTPStatusError(
+                "Rate limited", request=MagicMock(), response=MagicMock(status_code=429)
+            ),
+            "429",
+        ),
+    ],
+)
+async def test_call_api_exceptions(adapter: OpenRouterAdapter, side_effect, match):
+    """Timeout/HTTP error → AIServiceError."""
     mock_client = AsyncMock()
-    mock_client.post.side_effect = httpx.TimeoutException("timeout")
+    mock_client.post.side_effect = side_effect
     adapter._http = mock_client
     adapter._owns_client = False
 
-    with pytest.raises(AIServiceError, match="timeout"):
-        await adapter._call_api([{"role": "user", "content": "hi"}])
-
-
-@pytest.mark.asyncio
-async def test_call_api_http_error(adapter: OpenRouterAdapter):
-    """HTTP error → AIServiceError with status code."""
-    import httpx
-
-    mock_response = MagicMock()
-    mock_response.status_code = 429
-    mock_response.text = "Rate limited"
-
-    mock_client = AsyncMock()
-    mock_client.post.side_effect = httpx.HTTPStatusError(
-        "Rate limited", request=MagicMock(), response=mock_response
-    )
-    adapter._http = mock_client
-    adapter._owns_client = False
-
-    with pytest.raises(AIServiceError, match="429"):
+    with pytest.raises(AIServiceError, match=match):
         await adapter._call_api([{"role": "user", "content": "hi"}])
 
 

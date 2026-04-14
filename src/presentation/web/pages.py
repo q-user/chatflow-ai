@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +18,16 @@ from infrastructure.database.session import get_db_session
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
+# Disable template caching (cache_size=0) to avoid Python 3.14 LRU cache bug
+# where dict objects cannot be used as cache keys
+env = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    cache_size=0,
+    autoescape=select_autoescape(),
+)
+
 router = APIRouter()
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = Jinja2Templates(env=env)
 
 # Valid values for form fields
 ALLOWED_MESSENGER_TYPES = {"TG", "YM"}
@@ -28,7 +37,7 @@ ALLOWED_MODULE_TYPES = {"finance", "estimator", "hr"}
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Render login page."""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -48,15 +57,19 @@ async def dashboard_page(
     bots = result.scalars().all()
 
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
-        {"request": request, "user": user, "bots": bots},
+        {"user": user, "bots": bots},
     )
 
 
 @router.get("/bots/add", response_class=HTMLResponse)
-async def bot_add_form(request: Request):
+async def bot_add_form(
+    request: Request,
+    user: UserTable = Depends(current_active_user_cookie),
+):
     """Return bot creation form partial (HTMX)."""
-    return templates.TemplateResponse("partials/bot_form.html", {"request": request})
+    return templates.TemplateResponse(request, "partials/bot_form.html")
 
 
 @router.post("/bots", response_class=HTMLResponse)
@@ -97,8 +110,9 @@ async def create_bot(
     bots = result.scalars().all()
 
     return templates.TemplateResponse(
+        request,
         "partials/bot_table.html",
-        {"request": request, "bots": bots},
+        {"bots": bots},
     )
 
 
@@ -130,6 +144,7 @@ async def toggle_bot(
     bots = result.scalars().all()
 
     return templates.TemplateResponse(
+        request,
         "partials/bot_table.html",
-        {"request": request, "bots": bots},
+        {"bots": bots},
     )
