@@ -262,7 +262,7 @@ async def test_htmx_middleware_login_redirect(client: AsyncClient):
         data={"username": test_email, "password": "SecureP@ss123"},
         headers={"HX-Request": "true"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     assert resp.headers.get("HX-Redirect") == "/dashboard"
 
 
@@ -287,12 +287,12 @@ async def test_htmx_middleware_logout_redirect(client: AsyncClient):
         "/auth/cookie/login",
         data={"username": test_email, "password": "SecureP@ss123"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 204
 
     # Logout with HTMX request
     resp = await client.post(
         "/auth/cookie/logout",
         headers={"HX-Request": "true"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     assert resp.headers.get("HX-Redirect") == "/login"

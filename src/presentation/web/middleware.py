@@ -19,7 +19,7 @@ class HtmxAuthMiddleware(BaseHTTPMiddleware):
         if (
             request.url.path == "/auth/cookie/login"
             and request.method == "POST"
-            and response.status_code == 200
+            and response.status_code == 204
             and "HX-Request" in request.headers
         ):
             response.headers["HX-Redirect"] = "/dashboard"
@@ -28,7 +28,7 @@ class HtmxAuthMiddleware(BaseHTTPMiddleware):
         elif (
             request.url.path == "/auth/cookie/logout"
             and request.method == "POST"
-            and response.status_code == 200
+            and response.status_code == 204
             and "HX-Request" in request.headers
         ):
             response.headers["HX-Redirect"] = "/login"

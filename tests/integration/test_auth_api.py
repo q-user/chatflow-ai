@@ -221,8 +221,8 @@ async def test_register_user_idempotent_company(
 
 
 @pytest.mark.asyncio
-async def test_cookie_login_returns_200(client: AsyncClient):
-    """POST /auth/cookie/login → 200 + Set-Cookie."""
+async def test_cookie_login_returns_204(client: AsyncClient):
+    """POST /auth/cookie/login → 204 + Set-Cookie."""
     await client.post(
         "/auth/register",
         json={
@@ -238,7 +238,7 @@ async def test_cookie_login_returns_200(client: AsyncClient):
         "/auth/cookie/login",
         data={"username": "cookie_login@example.com", "password": "SecureP@ss123"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     assert "set-cookie" in [h.lower() for h in resp.headers.keys()]
 
 

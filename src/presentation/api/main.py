@@ -29,7 +29,7 @@ async def unauthorized_handler(request: Request, exc):
 
 # Include auth routers
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(auth_router_cookie, prefix="/auth", tags=["auth-cookie"])
+app.include_router(auth_router_cookie, prefix="/auth/cookie", tags=["auth-cookie"])
 app.include_router(register_router, prefix="/auth", tags=["auth"])
 app.include_router(users_router, prefix="/users", tags=["users"])
 
