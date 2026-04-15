@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from infrastructure.database.base import Base
@@ -19,6 +19,9 @@ class CompanyTable(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    allowed_modules: Mapped[list[str]] = mapped_column(
+        JSONB, server_default='["finance"]', nullable=False, default=lambda: ["finance"]
     )
 
     # relationships

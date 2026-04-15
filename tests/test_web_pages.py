@@ -237,6 +237,179 @@ async def test_dashboard_shows_bot_table(auth_client: AsyncClient, db_session):
     assert "estimator" in resp.text
 
 
+# ── Entitlement enforcement ─────────────────────────────────────────
+
+
+async def _create_user_in_company(
+    client: AsyncClient, db_session, company, email_suffix: str = "example.com"
+):
+    """Register user via API (proper password hashing), then move to company."""
+    test_email = f"entitlement_{uuid.uuid4().hex[:6]}@{email_suffix}"
+    test_password = "SecureP@ss123"
+
+    # Register via API (creates its own company, but that's fine)
+    resp = await client.post(
+        "/auth/register",
+        json={
+            "email": test_email,
+            "password": test_password,
+            "is_active": True,
+            "is_superuser": False,
+            "is_verified": False,
+        },
+    )
+    assert resp.status_code in (201, 400), f"Registration failed: {resp.text}"
+
+    # Move user to target company
+    from infrastructure.database.models.user import UserTable
+    from sqlalchemy import select
+
+    result = await db_session.execute(
+        select(UserTable).where(UserTable.email == test_email)
+    )
+    user = result.scalar_one_or_none()
+    assert user is not None
+    user.company_id = company.id
+    await db_session.flush()
+
+    # Login
+    resp = await client.post(
+        "/auth/login",
+        data={"username": test_email, "password": test_password},
+    )
+    assert resp.status_code == 200
+    client.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
+    return user
+
+
+@pytest.mark.asyncio
+async def test_create_bot_restricted_company_returns_400(
+    client: AsyncClient, db_session
+):
+    """Company with allowed_modules=['finance'] cannot create 'hr' bot → 400."""
+    company = CompanyTable(
+        name="Restricted Company",
+        allowed_modules=["finance"],
+    )
+    db_session.add(company)
+    await db_session.flush()
+
+    await _create_user_in_company(client, db_session, company)
+
+    # Try to create bot with module_type not in allowed_modules
+    resp = await client.post(
+        "/bots",
+        data={
+            "token": "restricted_bot_token",
+            "messenger_type": "TG",
+            "module_type": "hr",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid module_type" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_bot_superuser_bypass(client: AsyncClient, db_session):
+    """Superuser can create bot with any module_type, regardless of company entitlements."""
+    company = CompanyTable(
+        name="Superuser Company",
+        allowed_modules=["finance"],
+    )
+    db_session.add(company)
+    await db_session.flush()
+
+    user = await _create_user_in_company(client, db_session, company)
+    # Promote to superuser
+    user.is_superuser = True
+    await db_session.flush()
+
+    # Superuser can create bot with module_type NOT in company.allowed_modules
+    resp = await client.post(
+        "/bots",
+        data={
+            "token": "super_bot_token",
+            "messenger_type": "YM",
+            "module_type": "hr",
+        },
+    )
+    assert resp.status_code == 200
+    assert "hr" in resp.text
+
+
+# ── Form renders only allowed modules ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bot_form_renders_only_allowed_modules(client: AsyncClient, db_session):
+    """GET /bots/add for company with ['finance'] → HTML has no <option value='hr'>."""
+    company = CompanyTable(
+        name="Finance-Only Company",
+        allowed_modules=["finance"],
+    )
+    db_session.add(company)
+    await db_session.flush()
+
+    await _create_user_in_company(client, db_session, company)
+
+    resp = await client.get("/bots/add")
+    assert resp.status_code == 200
+    # Should have finance option
+    assert 'value="finance"' in resp.text
+    # Should NOT have estimator or hr options
+    assert 'value="estimator"' not in resp.text
+    assert 'value="hr"' not in resp.text
+
+
+# ── Empty allowed_modules ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_empty_allowed_modules_form_empty(client: AsyncClient, db_session):
+    """GET /bots/add for company with allowed_modules=[] → form has no module options."""
+    company = CompanyTable(
+        name="Empty Company",
+        allowed_modules=[],
+    )
+    db_session.add(company)
+    await db_session.flush()
+
+    await _create_user_in_company(client, db_session, company)
+
+    # Form should render but with no module options
+    resp = await client.get("/bots/add")
+    assert resp.status_code == 200
+    assert 'value="finance"' not in resp.text
+    assert 'value="estimator"' not in resp.text
+    assert 'value="hr"' not in resp.text
+
+    # Creating a bot should return 403
+    resp = await client.post(
+        "/bots",
+        data={
+            "token": "no_module_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+        },
+    )
+    assert resp.status_code == 403
+    assert "no allowed modules" in resp.text.lower()
+
+
+# ── CompanyTable default allowed_modules ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_company_default_allowed_modules(db_session):
+    """New CompanyTable without explicit allowed_modules gets ['finance']."""
+    company = CompanyTable(name="Default Company")
+    db_session.add(company)
+    await db_session.flush()
+
+    # Check default value
+    assert company.allowed_modules == ["finance"]
+
+
 # ── HtmxAuthMiddleware HX-Redirect tests ────────────────────────────────
 
 

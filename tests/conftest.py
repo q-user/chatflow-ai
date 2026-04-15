@@ -121,7 +121,10 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def test_company(db_session: AsyncSession) -> CompanyTable:
     """Create a test company for multi-tenant tests."""
-    company = CompanyTable(name="Test Company")
+    company = CompanyTable(
+        name="Test Company",
+        allowed_modules=["finance", "estimator", "hr"],
+    )
     db_session.add(company)
     await db_session.flush()
     return company
@@ -171,11 +174,16 @@ async def client(
 
 
 @pytest_asyncio.fixture
-async def auth_client(client: AsyncClient) -> AsyncGenerator[AsyncClient, None]:
+async def auth_client(
+    client: AsyncClient, db_session: AsyncSession
+) -> AsyncGenerator[AsyncClient, None]:
     """HTTP client with valid JWT token via full register → login flow.
 
     Idempotent: if user already exists (e.g. on persistent PostgreSQL DB),
     just proceeds to login.
+
+    The user's company is updated to allow all module types so tests can
+    create bots with any module_type.
     """
     test_email = f"auth_test_{uuid.uuid4().hex[:6]}@example.com"
     test_password = "SecureP@ss123"
@@ -203,6 +211,24 @@ async def auth_client(client: AsyncClient) -> AsyncGenerator[AsyncClient, None]:
 
     # Set Authorization header for subsequent requests
     client.headers["Authorization"] = f"Bearer {token}"
+
+    # Update the user's company to allow all module types for tests
+    from sqlalchemy import select
+    from infrastructure.database.models.user import UserTable
+    from infrastructure.database.models.company import CompanyTable
+
+    result = await db_session.execute(
+        select(UserTable).where(UserTable.email == test_email)
+    )
+    user = result.scalar_one_or_none()
+    if user:
+        result = await db_session.execute(
+            select(CompanyTable).where(CompanyTable.id == user.company_id)
+        )
+        company = result.scalar_one_or_none()
+        if company:
+            company.allowed_modules = ["finance", "estimator", "hr"]
+            await db_session.flush()
 
     yield client
 

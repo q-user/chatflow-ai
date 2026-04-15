@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Single source of truth for all supported module types.
+# Used by entitlements logic, migrations, and future admin UI.
+ALL_MODULE_TYPES: list[str] = ["finance", "estimator", "hr"]
+
 
 class Settings(BaseSettings):
     # Pydantic автоматически сопоставит имена из .env (регистр не важен)
