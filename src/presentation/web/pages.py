@@ -17,6 +17,8 @@ from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.database.session import get_db_session
 from infrastructure.messengers import create_adapter
+from presentation.api.otp import get_otp_service
+from core.services.otp import OTPService, RateLimitExceeded
 
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -93,6 +95,26 @@ async def dashboard_page(
         "dashboard.html",
         {"user": user, "bots": bots},
     )
+
+
+@router.post("/dashboard/otp", response_class=HTMLResponse)
+async def generate_otp_web(
+    request: Request,
+    user: UserTable = Depends(current_active_user_cookie),
+    otp_service: OTPService = Depends(get_otp_service),
+):
+    """Generate OTP code and return result partial via HTMX."""
+    try:
+        code = await otp_service.generate_code(user.id)
+        return templates.TemplateResponse(
+            request, "partials/otp_result.html", {"code": code}
+        )
+    except RateLimitExceeded:
+        return templates.TemplateResponse(
+            request,
+            "partials/otp_result.html",
+            {"error": "Подождите 60 секунд перед повторной генерацией"},
+        )
 
 
 @router.get("/bots/add", response_class=HTMLResponse)

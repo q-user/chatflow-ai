@@ -410,6 +410,53 @@ async def test_company_default_allowed_modules(db_session):
     assert company.allowed_modules == ["finance"]
 
 
+# ── OTP generation ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_otp_generation_requires_auth(client: AsyncClient):
+    """POST /dashboard/otp requires authentication."""
+    resp = await client.post("/dashboard/otp")
+    assert resp.status_code in (307, 401)
+
+
+@pytest.mark.asyncio
+async def test_otp_generation_success(auth_client: AsyncClient):
+    """Authenticated user can generate OTP code and see it rendered."""
+    resp = await auth_client.post("/dashboard/otp")
+    assert resp.status_code == 200
+    # Should show the 6-digit code
+    assert "text-3xl" in resp.text
+    assert "font-mono" in resp.text
+    # Should not show error
+    assert "red-50" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_otp_generation_rate_limit(auth_client: AsyncClient):
+    """Second OTP request within 60s shows rate limit error message."""
+    # First request — success
+    resp = await auth_client.post("/dashboard/otp")
+    assert resp.status_code == 200
+    assert "text-3xl" in resp.text
+
+    # Second request — rate limited
+    resp = await auth_client.post("/dashboard/otp")
+    assert resp.status_code == 200
+    assert "Подождите 60 секунд" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_shows_otp_section(auth_client: AsyncClient):
+    """Dashboard renders the OTP card with button and container."""
+    resp = await auth_client.get("/dashboard")
+    assert resp.status_code == 200
+    assert "Привязка мессенджера" in resp.text
+    assert "Сгенерировать код" in resp.text
+    assert 'hx-post="/dashboard/otp"' in resp.text
+    assert "otp-container" in resp.text
+
+
 # ── HtmxAuthMiddleware HX-Redirect tests ────────────────────────────────
 
 

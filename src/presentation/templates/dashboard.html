@@ -31,6 +31,19 @@
       </dl>
     </div>
 
+    <!-- Messenger linking -->
+    <div class="mb-8 rounded-lg bg-white p-6 shadow">
+      <h2 class="text-lg font-semibold text-gray-900">Привязка мессенджера</h2>
+      <p class="mt-2 text-sm text-gray-500">Сгенерируйте код и отправьте его боту для привязки аккаунта</p>
+      <button hx-post="/dashboard/otp"
+              hx-target="#otp-container"
+              hx-swap="innerHTML"
+              class="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+        Сгенерировать код
+      </button>
+      <div id="otp-container"></div>
+    </div>
+
     <!-- Bot list -->
     <div class="rounded-lg bg-white p-6 shadow">
       <div class="flex items-center justify-between mb-6">
