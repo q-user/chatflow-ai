@@ -198,3 +198,22 @@ class TelegramAdapter(IMessengerAdapter):
         url = self.BASE_URL.format(token=self._bot_token) + "/answerCallbackQuery"
         response = await http.post(url, json={"callback_query_id": callback_id})
         response.raise_for_status()
+
+    async def register_webhook(self, webhook_url: str) -> None:
+        """Register a webhook URL with Telegram via /setWebhook.
+
+        :param webhook_url: Full public URL for the webhook endpoint.
+        :raises ValueError: If token is invalid or Telegram API rejects the request.
+        """
+        http = await self._get_http_client()
+        url = self.BASE_URL.format(token=self._bot_token) + "/setWebhook"
+        resp = await http.post(url, data={"url": webhook_url})
+        if resp.status_code != 200:
+            raise ValueError(
+                f"Telegram API rejected webhook registration: {resp.status_code}"
+            )
+        result = resp.json()
+        if not result.get("ok"):
+            raise ValueError(
+                f"Telegram /setWebhook returned ok=false: {result.get('description', 'unknown')}"
+            )

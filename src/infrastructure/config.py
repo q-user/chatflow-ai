@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "ChatFlow AI"
     environment: str = "development"
     debug: bool = False
+    domain: str = "localhost"
 
     database_url: str = ""
     database_sync_url: str = ""

@@ -146,7 +146,9 @@ async def otp_service(fake_redis: FakeAsyncRedis) -> OTPService:
 
 @pytest_asyncio.fixture
 async def client(
-    db_session: AsyncSession, fake_redis: FakeAsyncRedis
+    db_session: AsyncSession,
+    fake_redis: FakeAsyncRedis,
+    mock_adapter: IMessengerAdapter,
 ) -> AsyncGenerator[AsyncClient, None]:
     """Provide an async HTTP client with database and Redis dependency overrides."""
 
@@ -165,12 +167,24 @@ async def client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
+    # Override create_adapter in pages.py to inject mock_adapter
+    from presentation.web import pages as pages_module
+
+    def _override_create_adapter(
+        messenger_type: str, bot_token: str
+    ) -> IMessengerAdapter:
+        return mock_adapter
+
+    original_create_adapter = pages_module.create_adapter
+    pages_module.create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
 
     app.dependency_overrides.clear()
+    pages_module.create_adapter = original_create_adapter  # ty: ignore[invalid-assignment]
 
 
 @pytest_asyncio.fixture
@@ -338,6 +352,8 @@ def mock_adapter() -> IMessengerAdapter:
     adapter.send_file = AsyncMock()
     adapter.download_file = AsyncMock()
     adapter.answer_callback = AsyncMock()
+    adapter.register_webhook = AsyncMock()
+    adapter.aclose = AsyncMock()
 
     return adapter
 

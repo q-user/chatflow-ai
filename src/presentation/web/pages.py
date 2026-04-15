@@ -11,11 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from infrastructure.auth import current_active_user_cookie
-from infrastructure.config import ALL_MODULE_TYPES
+from infrastructure.config import ALL_MODULE_TYPES, settings
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.database.session import get_db_session
+from infrastructure.messengers import create_adapter
 
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -117,7 +118,14 @@ async def create_bot(
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Create BotInstance and return updated bot table partial.
+    """Create BotInstance with webhook registration before DB insert.
+
+    Flow:
+    1. Validate messenger_type + module_type (unchanged)
+    2. Generate bot_id upfront
+    3. Build webhook_url from settings.domain
+    4. create_adapter → register_webhook → aclose (try/finally)
+    5. On success: create BotInstanceTable(id=bot_id) → commit → return table
 
     :param token: Bot API token.
     :param messenger_type: "TG" or "YM".
@@ -134,7 +142,19 @@ async def create_bot(
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
 
+    bot_id = uuid.uuid4()
+    webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
+
+    adapter = create_adapter(messenger_type, token)
+    try:
+        await adapter.register_webhook(webhook_url)
+    except ValueError as exc:
+        raise HTTPException(400, f"Webhook registration failed: {exc}")
+    finally:
+        await adapter.aclose()
+
     bot = BotInstanceTable(
+        id=bot_id,
         company_id=user.company_id,
         token=token,
         messenger_type=messenger_type,
