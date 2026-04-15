@@ -167,16 +167,10 @@ async def client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # Override create_adapter in pages.py to inject mock_adapter
-    from presentation.web import pages as pages_module
+    # Override adapter via FastAPI dependency
+    from presentation.web.pages import get_adapter
 
-    def _override_create_adapter(
-        messenger_type: str, bot_token: str
-    ) -> IMessengerAdapter:
-        return mock_adapter
-
-    original_create_adapter = pages_module.create_adapter
-    pages_module.create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
+    app.dependency_overrides[get_adapter] = lambda: mock_adapter
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -184,7 +178,6 @@ async def client(
         yield ac
 
     app.dependency_overrides.clear()
-    pages_module.create_adapter = original_create_adapter  # ty: ignore[invalid-assignment]
 
 
 @pytest_asyncio.fixture
@@ -232,7 +225,7 @@ async def auth_client(
     from infrastructure.database.models.company import CompanyTable
 
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == test_email)
+        select(UserTable).where(UserTable.email == test_email)  # ty: ignore[invalid-argument-type]
     )
     user = result.scalar_one_or_none()
     if user:

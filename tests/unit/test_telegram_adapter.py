@@ -1,6 +1,7 @@
 """Unit tests for Telegram adapter."""
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -249,3 +250,61 @@ def test_is_command_false():
         messenger_type="TG",
     )
     assert env.is_command is False
+
+
+# ──────────────────────────────────────────────
+# register_webhook tests
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_success():
+    """Valid token + 200 ok=true → no exception."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"ok": True, "result": True}
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    adapter = TelegramAdapter(bot_token="test_token", http_client=mock_client)
+    await adapter.register_webhook("https://example.com/webhook")
+
+    mock_client.post.assert_awaited_once()
+    call_kwargs = mock_client.post.call_args[1]
+    assert call_kwargs["data"]["url"] == "https://example.com/webhook"
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_non_200_status():
+    """Non-200 response → ValueError with status code."""
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.json.return_value = {}
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    adapter = TelegramAdapter(bot_token="bad_token", http_client=mock_client)
+
+    with pytest.raises(ValueError, match="Telegram API rejected webhook.*401"):
+        await adapter.register_webhook("https://example.com/webhook")
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_ok_false():
+    """ok=false in response → ValueError with description."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "ok": False,
+        "description": "Wrong response from the webhook",
+    }
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    adapter = TelegramAdapter(bot_token="test_token", http_client=mock_client)
+
+    with pytest.raises(ValueError, match="ok=false.*Wrong response"):
+        await adapter.register_webhook("https://example.com/webhook")

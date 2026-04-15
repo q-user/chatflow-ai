@@ -84,6 +84,11 @@ jobs:
           script: |-
             cd /opt/smart-hunt
 
+            # Write production .env from GitHub Secret
+            cat > .env << 'ENVEOF'
+            ${{ secrets.PROD_ENV_FILE }}
+            ENVEOF
+
             # 1. Логин (токен умрет после завершения скрипта)
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 

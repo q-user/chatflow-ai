@@ -16,7 +16,8 @@ from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.database.session import get_db_session
-from infrastructure.messengers import create_adapter
+from infrastructure.messengers import UnsupportedMessengerError, create_adapter
+from core.interfaces.messenger import IMessengerAdapter
 from presentation.api.otp import get_otp_service
 from core.services.otp import OTPService, RateLimitExceeded
 
@@ -35,7 +36,23 @@ router = APIRouter()
 templates = Jinja2Templates(env=env)
 
 # Valid values for form fields
-ALLOWED_MESSENGER_TYPES = {"TG", "YM"}
+ALLOWED_MESSENGER_TYPES = {"TG"}
+
+
+def _default_create_adapter(messenger_type: str, token: str) -> IMessengerAdapter:
+    """Default adapter factory — uses the registry.
+
+    Override via app.dependency_overrides[get_adapter] for testing.
+    """
+    return create_adapter(messenger_type, token)
+
+
+async def get_adapter(
+    messenger_type: str,
+    token: str,
+) -> IMessengerAdapter:
+    """FastAPI dependency: creates a messenger adapter by type and token."""
+    return _default_create_adapter(messenger_type, token)
 
 
 def get_available_modules_for(
@@ -139,6 +156,7 @@ async def create_bot(
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
+    adapter: IMessengerAdapter = Depends(get_adapter),
 ):
     """Create BotInstance with webhook registration before DB insert.
 
@@ -146,12 +164,13 @@ async def create_bot(
     1. Validate messenger_type + module_type (unchanged)
     2. Generate bot_id upfront
     3. Build webhook_url from settings.domain
-    4. create_adapter → register_webhook → aclose (try/finally)
+    4. adapter → register_webhook → aclose (try/finally)
     5. On success: create BotInstanceTable(id=bot_id) → commit → return table
 
     :param token: Bot API token.
-    :param messenger_type: "TG" or "YM".
+    :param messenger_type: "TG".
     :param module_type: "finance", "estimator", "hr".
+    :param adapter: Injectable messenger adapter (overridden in tests).
     """
     if messenger_type not in ALLOWED_MESSENGER_TYPES:
         raise HTTPException(400, f"Invalid messenger_type: {messenger_type}")
@@ -167,9 +186,10 @@ async def create_bot(
     bot_id = uuid.uuid4()
     webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
 
-    adapter = create_adapter(messenger_type, token)
     try:
         await adapter.register_webhook(webhook_url)
+    except UnsupportedMessengerError as exc:
+        raise HTTPException(501, f"Messenger type not yet supported: {exc}")
     except ValueError as exc:
         raise HTTPException(400, f"Webhook registration failed: {exc}")
     finally:

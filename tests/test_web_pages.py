@@ -1,6 +1,8 @@
 """Tests for web dashboard pages (Jinja2 templates)."""
 
+import re
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -8,6 +10,7 @@ from sqlalchemy import select
 
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
+from infrastructure.messengers import UnsupportedMessengerError
 
 
 @pytest.mark.asyncio
@@ -110,11 +113,83 @@ async def test_create_bot_invalid_field(
     assert "Invalid" in resp.text
 
 
+# ── Create bot: webhook failure ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_bot_webhook_failure_returns_400(
+    auth_client: AsyncClient, mock_adapter: AsyncMock, db_session
+):
+    """register_webhook raises ValueError → 400, bot NOT created in DB."""
+    mock_adapter.register_webhook.side_effect = ValueError("Invalid token")
+
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "bad_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Webhook registration failed" in resp.text
+
+    # Verify bot was NOT created
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "bad_token")
+    )
+    assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_create_bot_unsupported_messenger_returns_400(
+    auth_client: AsyncClient,
+):
+    """YM messenger type is not in ALLOWED_MESSENGER_TYPES → 400."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "some_token",
+            "messenger_type": "YM",
+            "module_type": "finance",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid messenger_type" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_adapter_unsupported_messenger_raises_501_equivalent():
+    """create_adapter raises UnsupportedMessengerError for unknown types."""
+    from infrastructure.messengers import create_adapter
+
+    with pytest.raises(UnsupportedMessengerError):
+        create_adapter("YM", "some_token")
+
+
+@pytest.mark.asyncio
+async def test_create_bot_aclose_called_on_webhook_failure(
+    auth_client: AsyncClient, mock_adapter: AsyncMock
+):
+    """aclose() is called even when register_webhook raises ValueError."""
+    mock_adapter.register_webhook.side_effect = ValueError("Token rejected")
+
+    await auth_client.post(
+        "/bots",
+        data={
+            "token": "fail_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+        },
+    )
+
+    mock_adapter.aclose.assert_awaited_once()
+
+
 # ── Toggle bot ──────────────────────────────────────────────────────
 
 BOT_TOGGLE_PARAMS = [
     ("TG", "finance"),
-    ("YM", "hr"),
 ]
 
 
@@ -265,7 +340,7 @@ async def _create_user_in_company(
     from sqlalchemy import select
 
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == test_email)
+        select(UserTable).where(UserTable.email == test_email)  # ty: ignore[invalid-argument-type]
     )
     user = result.scalar_one_or_none()
     assert user is not None
@@ -329,7 +404,7 @@ async def test_create_bot_superuser_bypass(client: AsyncClient, db_session):
         "/bots",
         data={
             "token": "super_bot_token",
-            "messenger_type": "YM",
+            "messenger_type": "TG",
             "module_type": "hr",
         },
     )
@@ -444,6 +519,19 @@ async def test_otp_generation_rate_limit(auth_client: AsyncClient):
     resp = await auth_client.post("/dashboard/otp")
     assert resp.status_code == 200
     assert "Подождите 60 секунд" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_otp_code_format(auth_client: AsyncClient):
+    """OTP code in response is exactly 6 digits."""
+    resp = await auth_client.post("/dashboard/otp")
+    assert resp.status_code == 200
+    # Extract code from HTML — rendered in <p class="... font-mono ...">
+    match = re.search(r'<p[^>]*class="[^"]*font-mono[^"]*"[^>]*>(\d+)</p>', resp.text)
+    assert match is not None, "OTP code element not found in response"
+    code = match.group(1)
+    assert code.isdigit(), f"OTP code '{code}' is not all digits"
+    assert len(code) == 6, f"OTP code '{code}' is not 6 digits"
 
 
 @pytest.mark.asyncio

@@ -51,6 +51,8 @@ migrations/versions/*.py
 .env.backup
 *.env
 .env.*
+!.env.example
+.env.production
 
 # IDE
 .vscode/
