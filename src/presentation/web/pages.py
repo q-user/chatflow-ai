@@ -35,7 +35,9 @@ templates = Jinja2Templates(env=env)
 ALLOWED_MESSENGER_TYPES = {"TG", "YM"}
 
 
-def get_available_modules_for(user: UserTable, company: CompanyTable) -> list[str]:
+def get_available_modules_for(
+    user: UserTable, company: CompanyTable | None
+) -> list[str]:
     """Compute allowed modules — superusers get all, otherwise company entitlements.
 
     Raises HTTPException(500) if company is None (data corruption).
