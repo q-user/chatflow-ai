@@ -2,6 +2,7 @@
 
 from core.interfaces.messenger import IMessengerAdapter
 from infrastructure.messengers.telegram import TelegramAdapter
+from infrastructure.messengers.yandex import YandexAdapter
 
 
 class UnsupportedMessengerError(ValueError):
@@ -13,7 +14,7 @@ class UnsupportedMessengerError(ValueError):
 # Registry: messenger_type → adapter class
 ADAPTER_REGISTRY: dict[str, type[IMessengerAdapter]] = {
     "TG": TelegramAdapter,
-    # "YM": YandexAdapter,  # future
+    "YM": YandexAdapter,
 }
 
 

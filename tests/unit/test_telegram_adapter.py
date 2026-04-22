@@ -3,6 +3,7 @@
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from core.domain.incoming import IncomingEnvelope
@@ -308,3 +309,25 @@ async def test_register_webhook_ok_false():
 
     with pytest.raises(ValueError, match="ok=false.*Wrong response"):
         await adapter.register_webhook("https://example.com/webhook")
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_network_error():
+    """Network error during register_webhook → ValueError."""
+    mock_client = AsyncMock()
+    mock_client.post.side_effect = httpx.ConnectTimeout("Timeout")
+
+    adapter = TelegramAdapter(bot_token="test_token", http_client=mock_client)
+    with pytest.raises(ValueError, match="Network error registering webhook"):
+        await adapter.register_webhook("https://example.com/webhook")
+
+
+@pytest.mark.asyncio
+async def test_send_text_network_error():
+    """Network error during send_text → ValueError."""
+    mock_client = AsyncMock()
+    mock_client.post.side_effect = httpx.ConnectError("Connect failed")
+
+    adapter = TelegramAdapter(bot_token="test_token", http_client=mock_client)
+    with pytest.raises(ValueError, match="Network error sending text message"):
+        await adapter.send_text("123", "Hello")

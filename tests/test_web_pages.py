@@ -164,7 +164,7 @@ async def test_create_adapter_unsupported_messenger_raises_501_equivalent():
     from infrastructure.messengers import create_adapter
 
     with pytest.raises(UnsupportedMessengerError):
-        create_adapter("YM", "some_token")
+        create_adapter("DISCORD", "some_token")
 
 
 @pytest.mark.asyncio
@@ -188,18 +188,13 @@ async def test_create_bot_aclose_called_on_webhook_failure(
 
 # ── Toggle bot ──────────────────────────────────────────────────────
 
-BOT_TOGGLE_PARAMS = [
-    ("TG", "finance"),
-]
-
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("messenger,module", BOT_TOGGLE_PARAMS)
 async def test_toggle_bot_cycle(
     auth_client: AsyncClient,
     db_session,
-    messenger: str,
-    module: str,
+    messenger: str = "TG",
+    module: str = "finance",
 ):
     """Create → toggle active→inactive → toggle inactive→active."""
     token = f"toggle_{messenger}_{module}"

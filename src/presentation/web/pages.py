@@ -190,6 +190,8 @@ async def create_bot(
         await adapter.register_webhook(webhook_url)
     except UnsupportedMessengerError as exc:
         raise HTTPException(501, f"Messenger type not yet supported: {exc}")
+    except NotImplementedError as exc:
+        raise HTTPException(501, f"Feature not yet implemented: {exc}")
     except ValueError as exc:
         raise HTTPException(400, f"Webhook registration failed: {exc}")
     finally:

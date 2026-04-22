@@ -284,16 +284,22 @@ async def _download_and_parse_media(
                         from infrastructure.stt import create_stt_adapter
 
                         stt = create_stt_adapter()
-                    text = await stt.transcribe(local_path)
-                    if text:
-                        parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
+                    try:
+                        text = await stt.transcribe(local_path)
+                        if text:
+                            parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
+                    finally:
+                        os.unlink(local_path)
                 elif category == "document":
-                    if file_type:
-                        text = process_document(local_path, file_type)
-                    else:
-                        text = None
-                    if text:
-                        parsed_parts.append(f"[Содержимое документа]:\n{text}")
+                    try:
+                        if file_type:
+                            text = process_document(local_path, file_type)
+                        else:
+                            text = None
+                        if text:
+                            parsed_parts.append(f"[Содержимое документа]:\n{text}")
+                    finally:
+                        os.unlink(local_path)
                 else:
                     logger.warning("Unknown file category for %s, skipping", file_id)
             except Exception as exc:
@@ -336,7 +342,17 @@ async def _finance_ai_pipeline(
     if not full_text:
         raise ValueError("No text data (neither messages nor media) for processing")
 
-    return await _ai_generate_json(system_prompt, full_text, image_paths=image_paths)
+    try:
+        return await _ai_generate_json(
+            system_prompt, full_text, image_paths=image_paths
+        )
+    finally:
+        if image_paths:
+            for p in image_paths:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
 
 
 def _mime_to_ext(mime: str) -> str:
@@ -453,5 +469,13 @@ def _deliver_artifact(snapshot: dict, artifact_path: str) -> None:
             )
         finally:
             await adapter.aclose()
+            try:
+                os.unlink(artifact_path)
+            except OSError:
+                logger.warning("Failed to cleanup artifact: %s", artifact_path)
+            try:
+                os.unlink(artifact_path)
+            except OSError:
+                logger.warning("Failed to cleanup artifact: %s", artifact_path)
 
     asyncio.run(_send())

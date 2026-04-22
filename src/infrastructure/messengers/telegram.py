@@ -8,9 +8,10 @@ import httpx
 
 from core.domain.incoming import IncomingEnvelope
 from core.interfaces.messenger import IMessengerAdapter
+from infrastructure.messengers.base import BaseHttpAdapter
 
 
-class TelegramAdapter(IMessengerAdapter):
+class TelegramAdapter(BaseHttpAdapter, IMessengerAdapter):
     """Telegram Bot API adapter via httpx.
 
     Implements the IMessengerAdapter port for Telegram messenger.
@@ -25,22 +26,11 @@ class TelegramAdapter(IMessengerAdapter):
         bot_token: str,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
+        super().__init__(http_client)
         self._bot_token = bot_token
-        self._http: httpx.AsyncClient | None = http_client
-        self._owns_client = http_client is None
 
-    async def _get_http_client(self) -> httpx.AsyncClient:
-        """Lazy httpx client creation."""
-        if self._http is None:
-            self._http = httpx.AsyncClient(timeout=30.0)
-        return self._http
-
-    async def aclose(self) -> None:
-        """Close the underlying httpx client if we created it."""
-        if self._owns_client and self._http is not None:
-            await self._http.aclose()
-            self._http = None
-
+    # ──────────────────────────────────────────────
+    # IMessengerAdapter implementation
     # ──────────────────────────────────────────────
     # IMessengerAdapter implementation
     # ──────────────────────────────────────────────
@@ -118,6 +108,7 @@ class TelegramAdapter(IMessengerAdapter):
         :param chat_id: Target chat ID.
         :param text: Message text.
         :param buttons: Optional inline keyboard rows.
+        :raises ValueError: If network error occurs.
         :raises httpx.HTTPStatusError: If API returns an error.
         """
         http = await self._get_http_client()
@@ -136,8 +127,11 @@ class TelegramAdapter(IMessengerAdapter):
             ]
             body["reply_markup"] = {"inline_keyboard": keyboard}
 
-        response = await http.post(url, json=body)
-        response.raise_for_status()
+        try:
+            response = await http.post(url, json=body)
+            response.raise_for_status()
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error sending text message: {e}") from e
 
     async def send_file(
         self, chat_id: str, file_path: str, caption: str | None = None
@@ -147,17 +141,21 @@ class TelegramAdapter(IMessengerAdapter):
         :param chat_id: Target chat ID.
         :param file_path: Local path to the file.
         :param caption: Optional caption.
+        :raises ValueError: If network error occurs.
         :raises httpx.HTTPStatusError: If API returns an error.
         """
         http = await self._get_http_client()
         url = self.BASE_URL.format(token=self._bot_token) + "/sendDocument"
-        with open(file_path, "rb") as f:
-            files = {"document": (Path(file_path).name, f)}
-            data: dict[str, Any] = {"chat_id": chat_id}
-            if caption:
-                data["caption"] = caption
-            response = await http.post(url, data=data, files=files)
-        response.raise_for_status()
+        try:
+            with open(file_path, "rb") as f:
+                files = {"document": (Path(file_path).name, f)}
+                data: dict[str, Any] = {"chat_id": chat_id}
+                if caption:
+                    data["caption"] = caption
+                response = await http.post(url, data=data, files=files)
+            response.raise_for_status()
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error sending file: {e}") from e
 
     async def download_file(self, file_id: str, dest_path: str) -> str:
         """Download a file from Telegram.
@@ -169,35 +167,45 @@ class TelegramAdapter(IMessengerAdapter):
         :param file_id: Telegram file ID.
         :param dest_path: Local destination path.
         :returns: Path to the saved file.
+        :raises ValueError: If network error occurs.
         :raises httpx.HTTPStatusError: If API returns an error.
         """
         http = await self._get_http_client()
-        # Step 1: Get file path from Telegram
-        get_file_url = self.BASE_URL.format(token=self._bot_token) + "/getFile"
-        response = await http.get(get_file_url, params={"file_id": file_id})
-        response.raise_for_status()
-        tg_file_path = response.json()["result"]["file_path"]
+        try:
+            # Step 1: Get file path from Telegram
+            get_file_url = self.BASE_URL.format(token=self._bot_token) + "/getFile"
+            response = await http.get(get_file_url, params={"file_id": file_id})
+            response.raise_for_status()
+            tg_file_path = response.json()["result"]["file_path"]
 
-        # Step 2: Download the file
-        file_url = self.FILE_URL.format(token=self._bot_token, file_path=tg_file_path)
-        download_response = await http.get(file_url)
-        download_response.raise_for_status()
+            # Step 2: Download the file
+            file_url = self.FILE_URL.format(
+                token=self._bot_token, file_path=tg_file_path
+            )
+            download_response = await http.get(file_url)
+            download_response.raise_for_status()
 
-        # Step 3: Save to dest_path
-        dest = Path(dest_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(download_response.content)
-        return str(dest)
+            # Step 3: Save to dest_path
+            dest = Path(dest_path)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(download_response.content)
+            return str(dest)
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error downloading file: {e}") from e
 
     async def answer_callback(self, callback_id: str) -> None:
         """Answer callback query to dismiss loading state on button.
 
         :param callback_id: Telegram callback_query ID.
+        :raises ValueError: If network error occurs.
         """
         http = await self._get_http_client()
         url = self.BASE_URL.format(token=self._bot_token) + "/answerCallbackQuery"
-        response = await http.post(url, json={"callback_query_id": callback_id})
-        response.raise_for_status()
+        try:
+            response = await http.post(url, json={"callback_query_id": callback_id})
+            response.raise_for_status()
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error answering callback: {e}") from e
 
     async def register_webhook(self, webhook_url: str) -> None:
         """Register a webhook URL with Telegram via /setWebhook.
@@ -207,7 +215,11 @@ class TelegramAdapter(IMessengerAdapter):
         """
         http = await self._get_http_client()
         url = self.BASE_URL.format(token=self._bot_token) + "/setWebhook"
-        resp = await http.post(url, data={"url": webhook_url})
+        try:
+            resp = await http.post(url, data={"url": webhook_url})
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error registering webhook: {e}") from e
+
         if resp.status_code != 200:
             raise ValueError(
                 f"Telegram API rejected webhook registration: {resp.status_code}"
