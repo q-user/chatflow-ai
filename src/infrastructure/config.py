@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     stt_base_url: str = "https://api.groq.com/openai/v1"
     stt_model_name: str = "whisper-large-v3"
 
+    # Sentry
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1
+    sentry_profiles_sample_rate: float = 0.1
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
