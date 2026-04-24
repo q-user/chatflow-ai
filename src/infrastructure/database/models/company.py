@@ -25,5 +25,5 @@ class CompanyTable(Base):
     )
 
     # relationships
-    users: Mapped[list["UserTable"]] = relationship(back_populates="company")  # type: ignore[name-defined]  # noqa: F821
-    bots: Mapped[list["BotInstanceTable"]] = relationship(back_populates="company")  # type: ignore[name-defined]  # noqa: F821
+    users: Mapped[list["UserTable"]] = relationship(back_populates="company")
+    bots: Mapped[list["BotInstanceTable"]] = relationship(back_populates="company")

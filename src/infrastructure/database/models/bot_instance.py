@@ -42,4 +42,4 @@ class BotInstanceTable(Base):
     )
 
     # relationships
-    company: Mapped["CompanyTable"] = relationship(back_populates="bots")  # type: ignore[name-defined]  # noqa: F821
+    company: Mapped["CompanyTable"] = relationship(back_populates="bots")

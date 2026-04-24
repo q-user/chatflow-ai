@@ -37,7 +37,7 @@ async def test_user_requires_company_id(db_session: AsyncSession):
     user = UserTable(
         email="no_company@example.com",
         hashed_password="pass",
-        company_id=None,  # type: ignore[arg-type]
+        company_id=None,
     )
     db_session.add(user)
 
@@ -208,7 +208,7 @@ async def test_user_company_relationship(
 
     result = await db_session.execute(
         select(UserTable)
-        .where(UserTable.id == user.id)  # type: ignore
+        .where(UserTable.id == user.id)
         .options(selectinload(UserTable.company))
     )
     loaded_user = result.scalar_one()

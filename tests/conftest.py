@@ -438,4 +438,4 @@ async def hooks_client(
         yield ac
 
     app.dependency_overrides.clear()
-    hook_router_module.create_adapter = original_create_adapter  # type: ignore[attr-defined]
+    hook_router_module.create_adapter = original_create_adapter

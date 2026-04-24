@@ -37,6 +37,6 @@ class ProjectTable(Base):
     )
 
     # relationships
-    company: Mapped["CompanyTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
-    user: Mapped["UserTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
-    bot_instance: Mapped["BotInstanceTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
+    company: Mapped["CompanyTable"] = relationship()
+    user: Mapped["UserTable"] = relationship()
+    bot_instance: Mapped["BotInstanceTable"] = relationship()

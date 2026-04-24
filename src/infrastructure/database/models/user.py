@@ -22,4 +22,4 @@ class UserTable(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     # relationships
-    company: Mapped["CompanyTable"] = relationship(back_populates="users")  # type: ignore[name-defined]  # noqa: F821
+    company: Mapped["CompanyTable"] = relationship(back_populates="users")
