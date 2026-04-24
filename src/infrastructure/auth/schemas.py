@@ -5,14 +5,13 @@ from pydantic import UUID4, BaseModel, ConfigDict, EmailStr
 from fastapi_users.schemas import BaseUserCreate, BaseUserUpdate
 
 
-class UserRead(BaseModel):
+class UserRead(BaseUserCreate):
     """Schema for reading user data (GET responses)."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID4
     company_id: UUID4
-    email: EmailStr
     is_active: bool = True
     is_superuser: bool = False
     is_verified: bool = False

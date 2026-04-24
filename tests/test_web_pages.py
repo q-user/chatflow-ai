@@ -335,7 +335,7 @@ async def _create_user_in_company(
     from sqlalchemy import select
 
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == test_email)  # ty: ignore[invalid-argument-type]
+        select(UserTable).where(UserTable.email == test_email)
     )
     user = result.scalar_one_or_none()
     assert user is not None

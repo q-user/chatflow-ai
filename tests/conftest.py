@@ -225,7 +225,7 @@ async def auth_client(
     from infrastructure.database.models.company import CompanyTable
 
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == test_email)  # ty: ignore[invalid-argument-type]
+        select(UserTable).where(UserTable.email == test_email)
     )
     user = result.scalar_one_or_none()
     if user:
