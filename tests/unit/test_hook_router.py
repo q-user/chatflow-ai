@@ -76,7 +76,7 @@ def hook_router(
 
     yield service
 
-    hook_router_module.create_adapter = original_create  # type: ignore[attr-defined]
+    hook_router_module.create_adapter = original_create
 
 
 def _make_unique_id() -> str:

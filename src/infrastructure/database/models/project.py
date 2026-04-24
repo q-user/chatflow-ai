@@ -1,10 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from infrastructure.database.base import Base
+
+if TYPE_CHECKING:
+    from .company import CompanyTable
+    from .user import UserTable
+    from .bot_instance import BotInstanceTable
 
 
 class ProjectTable(Base):
@@ -37,6 +43,6 @@ class ProjectTable(Base):
     )
 
     # relationships
-    company: Mapped["CompanyTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
-    user: Mapped["UserTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
-    bot_instance: Mapped["BotInstanceTable"] = relationship()  # type: ignore[name-defined]  # noqa: F821
+    company: Mapped["CompanyTable"] = relationship()
+    user: Mapped["UserTable"] = relationship()
+    bot_instance: Mapped["BotInstanceTable"] = relationship()

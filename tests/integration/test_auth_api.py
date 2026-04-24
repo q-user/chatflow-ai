@@ -54,7 +54,7 @@ async def test_register_creates_company_in_db(
 
     # Verify user is linked to this company
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == "company_test@example.com")  # type: ignore
+        select(UserTable).where(UserTable.email == "company_test@example.com")
     )
     user = result.scalar_one_or_none()
     assert user is not None
@@ -177,7 +177,7 @@ async def test_register_with_existing_company(
     assert len(companies) == initial_count
 
     result = await db_session.execute(
-        select(UserTable).where(UserTable.email == "existing_co@example.com")  # type: ignore
+        select(UserTable).where(UserTable.email == "existing_co@example.com")
     )
     user = result.scalar_one_or_none()
     assert user is not None

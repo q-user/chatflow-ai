@@ -152,11 +152,11 @@ class HookRouterService:
 
         try:
             if user_id is not None:
-                await adapter.send_text(envelope.chat_id, OTP_SUCCESS)
+                await self._safe_send(adapter, envelope.chat_id, OTP_SUCCESS)
             else:
-                await adapter.send_text(envelope.chat_id, OTP_FAILURE)
-        except ValueError:
-            logger.warning("Failed to send OTP result message")
+                await self._safe_send(adapter, envelope.chat_id, OTP_FAILURE)
+        except Exception as e:
+            logger.exception("Unexpected error sending OTP result: %s", e)
 
     async def _safe_send(
         self, adapter: IMessengerAdapter, chat_id: str, text: str

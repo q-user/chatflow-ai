@@ -1,92 +1,46 @@
 ```
-# Dependencies
-uv.lock
-
-# Python
-__pycache__/
+# Compiled Python files
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
+__pycache__/
+
+# Dependencies
 .venv/
-.ENV
-.python-version
-.python-history
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-htmlcov/
-.cache
-nosetests.xml
-coverage.xml
-*.cover
+venv/
+node_modules/
+
+# Logs and temporary files
 *.log
-.pytest_cache/
-.hypothesis/
-.DS_Store
-.mypy_cache/
-.pyre/
-.pytype/
-cython_debug/
+*.tmp
+*.swp
 
-# Database
-*.sqlite
-*.sqlite3
-.dynamodb/
-
-# Migrations
-migrations/versions/*.py
-
-# Environment variables
+# Environment files
 .env
 .env.local
-.env.dev
-.env.test
-.env.production
-.env.staging
-.env.backup
-*.env
-.env.*
-!.env.example
-.env.production
+*.env.*
 
-# IDE
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
 
 # Build artifacts
 dist/
 build/
 target/
-*.egg-info/
-.eggs/
-.installed.cfg
-*.egg
+*.class
+*.o
+*.obj
+*.out
+
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # Testing
-.tests/
-test/
-tests_output/
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Thumbs.db:encryptable
+.pytest_cache/
+.mypy_cache/
 ```
-.gemini/
-.qwen/
-.kilo

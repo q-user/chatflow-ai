@@ -1,9 +1,14 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 
 from infrastructure.database.base import Base
+
+if TYPE_CHECKING:
+    from .company import CompanyTable
 
 
 class UserTable(SQLAlchemyBaseUserTableUUID, Base):
@@ -22,4 +27,4 @@ class UserTable(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     # relationships
-    company: Mapped["CompanyTable"] = relationship(back_populates="users")  # type: ignore[name-defined]  # noqa: F821
+    company: Mapped["CompanyTable"] = relationship(back_populates="users")

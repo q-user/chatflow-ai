@@ -26,7 +26,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserTable, uuid.UUID]):
         super().__init__(user_db)
         self._session = session
 
-    async def create(  # type: ignore[override]
+    async def create(
         self,
         user_create: UserCreate,
         safe: bool = False,
@@ -48,7 +48,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserTable, uuid.UUID]):
             company = CompanyTable(name=company_name)
             self._session.add(company)
             await self._session.flush()
-            company_id = company.id  # type: ignore[assignment]
+            company_id = company.id
 
             # Пересоздаём UserCreate с company_id — иммутабельный подход
             # (мутация Pydantic-модели ненадёжна для create_update_dict)
