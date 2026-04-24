@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, ForeignKey, String
@@ -6,6 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON as GenericJSON
 
 from infrastructure.database.base import Base
+
+if TYPE_CHECKING:
+    from .company import CompanyTable
 
 
 class BotInstanceTable(Base):

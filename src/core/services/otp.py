@@ -1,4 +1,5 @@
 import uuid
+from typing import Any, cast, Awaitable
 
 from redis.asyncio import Redis
 
@@ -89,7 +90,9 @@ class OTPService:
         end
         return user_id
         """
-        user_id_bytes = await self._redis.eval(lua_script, 1, reverse_key)
+        user_id_bytes = await cast(
+            Awaitable[Any], self._redis.eval(lua_script, 1, reverse_key)
+        )
         if user_id_bytes is None:
             return None
 
