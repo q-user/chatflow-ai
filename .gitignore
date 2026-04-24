@@ -21,6 +21,9 @@ node_modules/
 # Editors
 .vscode/
 .idea/
+.gemini/
+.qwen/
+.kilo
 
 # Coverage reports
 .coverage
