@@ -1,11 +1,11 @@
 from typing import Any, Literal
 
-from pydantic import UUID4, BaseModel, ConfigDict, EmailStr
+from pydantic import UUID4, BaseModel, ConfigDict
 
-from fastapi_users.schemas import BaseUserCreate, BaseUserUpdate
+from fastapi_users.schemas import BaseUser, BaseUserCreate, BaseUserUpdate
 
 
-class UserRead(BaseUserCreate):
+class UserRead(BaseUser):
     """Schema for reading user data (GET responses)."""
 
     model_config = ConfigDict(from_attributes=True)
