@@ -29,7 +29,6 @@ async def test_yandex_send_text(yandex_adapter):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.raise_for_status.return_value = None
     mock_client.post.return_value = mock_response
-
     yandex_adapter._http = mock_client
 
     await yandex_adapter.send_text(chat_id="123", text="Hello Yandex")
@@ -39,6 +38,17 @@ async def test_yandex_send_text(yandex_adapter):
         json={"chat_id": "123", "text": "Hello Yandex"},
         headers={"Authorization": "OAuth test_yandex_token"},
     )
+
+
+@pytest.mark.asyncio
+async def test_yandex_send_text_network_error(yandex_adapter):
+    """Verify send_text handles httpx.RequestError by raising ValueError."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.post.side_effect = httpx.RequestError("Network failed")
+    yandex_adapter._http = mock_client
+
+    with pytest.raises(ValueError, match="Network error sending text message"):
+        await yandex_adapter.send_text(chat_id="123", text="Hello Yandex")
 
 
 @pytest.mark.asyncio

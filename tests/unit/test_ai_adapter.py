@@ -147,6 +147,31 @@ def test_strip_thinking_unclosed():
     assert result == ""
 
 
+def test_strip_thinking_edge_cases():
+    """Various edge cases for strip_thinking."""
+    # 1. Think end tag at the start
+    assert OpenRouterAdapter._strip_thinking("</think> Answer") == "Answer"
+
+    # 2. Empty content
+    assert OpenRouterAdapter._strip_thinking("") == ""
+
+    # 3. Content that starts with think_start_tag but has no content after
+    assert OpenRouterAdapter._strip_thinking("<|think|>") == ""
+
+    # 4. Thinking tag but not at the start (and no closing tag)
+    # Current impl: if think_end_tag not in content AND not startswith(think_start_tag) -> return content
+    assert (
+        OpenRouterAdapter._strip_thinking("Hello <|think|> world")
+        == "Hello <|think|> world"
+    )
+
+    # 5. Multiple closing tags
+    assert (
+        OpenRouterAdapter._strip_thinking("r1</think> a1 </think> a2")
+        == "a1 </think> a2"
+    )
+
+
 # ──────────────────────────────────────────────
 # generate_json tests
 # ──────────────────────────────────────────────

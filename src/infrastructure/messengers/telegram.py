@@ -32,8 +32,6 @@ class TelegramAdapter(BaseHttpAdapter, IMessengerAdapter):
     # ──────────────────────────────────────────────
     # IMessengerAdapter implementation
     # ──────────────────────────────────────────────
-    # IMessengerAdapter implementation
-    # ──────────────────────────────────────────────
 
     async def parse_webhook(self, payload: dict, bot_token: str) -> IncomingEnvelope:
         """Parse Telegram Update object → IncomingEnvelope.

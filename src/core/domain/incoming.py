@@ -1,11 +1,9 @@
 """Unified incoming message schema for all messengers."""
 
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
-
-MessengerType = Literal["TG", "YM"]
+from core.domain.messenger import MessengerType
 
 
 class IncomingEnvelope(BaseModel):

@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 
 from core.interfaces.speech import ISpeechToText, STTError
+from infrastructure.messengers.base import BaseHttpAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ MAX_AUDIO_SIZE = 25 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {".ogg", ".mp3", ".wav", ".m4a", ".flac", ".webm", ".opus"}
 
 
-class GroqWhisperAdapter(ISpeechToText):
+class GroqWhisperAdapter(BaseHttpAdapter, ISpeechToText):
     """Groq Cloud STT using Whisper-large-v3.
 
     Uses OpenAI-compatible /v1/audio/transcriptions endpoint.
@@ -30,24 +31,11 @@ class GroqWhisperAdapter(ISpeechToText):
         http_client: httpx.AsyncClient | None = None,
         timeout: float = 120.0,
     ) -> None:
+        super().__init__(http_client, timeout=timeout)
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout = timeout
-        self._http: httpx.AsyncClient | None = http_client
-        self._owns_client = http_client is None
-
-    async def _get_http_client(self) -> httpx.AsyncClient:
-        """Lazy httpx client creation."""
-        if self._http is None:
-            self._http = httpx.AsyncClient(timeout=self._timeout)
-        return self._http
-
-    async def aclose(self) -> None:
-        """Close the underlying httpx client if we created it."""
-        if self._owns_client and self._http is not None:
-            await self._http.aclose()
-            self._http = None
 
     async def transcribe(self, file_path: str, language: str = "ru") -> str:
         """Transcribe audio file via Groq Whisper API.

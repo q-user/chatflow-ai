@@ -9,6 +9,8 @@ import csv
 import logging
 import os
 import uuid
+import httpx
+from kombu.exceptions import OperationalError
 from datetime import datetime, timezone
 
 from infrastructure.database.models.project import ProjectTable
@@ -30,11 +32,18 @@ FINANCE_FALLBACK_PROMPT = (
     "Respond ONLY with valid JSON."
 )
 
+FILE_CATEGORY_PREFIXES = {
+    "image": "img",
+    "audio": "audio",
+    "document": "doc",
+    "unknown": "file",
+}
+
 
 @celery_app.task(
     name="compile_session",
     bind=True,
-    autoretry_for=(Exception,),
+    autoretry_for=(httpx.RequestError, OperationalError),
     retry_backoff=30,
     retry_backoff_max=300,
     retry_jitter=True,
@@ -121,7 +130,7 @@ def compile_session(self, snapshot: dict) -> dict:
                 logger.exception("Failed to update project status for %s", project_id)
 
         logger.exception("compile_session failed for project %s", project_id)
-        raise self.retry(exc=exc) from exc
+        raise
 
 
 def _get_module_handler(module_type: str):
@@ -255,16 +264,10 @@ async def _download_and_parse_media(
         for item in file_items:
             file_id = item["file_id"]
             file_type = item.get("file_type")
-            category = _classify_file(file_type)
-            ext = _mime_to_ext(file_type or "application/octet-stream")
-            prefix = {
-                "image": "img",
-                "audio": "audio",
-                "document": "doc",
-                "unknown": "file",
-            }
+            category, ext = _get_file_info(file_type)
             dest = os.path.join(
-                "/tmp", f"{prefix[category]}_{uuid.uuid4().hex[:8]}{ext}"
+                "/tmp",
+                f"{FILE_CATEGORY_PREFIXES[category]}_{uuid.uuid4().hex[:8]}{ext}",
             )
 
             # Download
@@ -355,46 +358,46 @@ async def _finance_ai_pipeline(
                     pass
 
 
-def _mime_to_ext(mime: str) -> str:
-    """Map MIME type to file extension."""
+def _get_file_info(mime: str | None) -> tuple[str, str]:
+    """Classify file and map MIME type to extension.
+
+    :param mime: MIME type string or None.
+    :returns: Tuple of (category, extension).
+    """
+    if not mime:
+        return "unknown", ".bin"
+
+    # extension mapping
     mapping = {
-        # Images
         "image/jpeg": ".jpg",
         "image/png": ".png",
         "image/gif": ".gif",
         "image/webp": ".webp",
-        # Audio
         "audio/ogg": ".ogg",
         "audio/mpeg": ".mp3",
         "audio/mp4": ".m4a",
         "audio/wav": ".wav",
         "audio/webm": ".webm",
         "audio/x-opus": ".opus",
-        # Documents
         "application/pdf": ".pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     }
-    return mapping.get(mime, ".bin")
+    ext = mapping.get(mime, ".bin")
 
-
-def _classify_file(file_type: str | None) -> str:
-    """Classify file by MIME type.
-
-    :param file_type: MIME type string or None.
-    :returns: "image" | "audio" | "document" | "unknown"
-    """
-    if not file_type:
-        return "unknown"
-    if file_type.startswith("image/"):
-        return "image"
-    if file_type.startswith("audio/"):
-        return "audio"
-    if file_type in (
+    # category classification
+    if mime.startswith("image/"):
+        category = "image"
+    elif mime.startswith("audio/"):
+        category = "audio"
+    elif mime in (
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ):
-        return "document"
-    return "unknown"
+        category = "document"
+    else:
+        category = "unknown"
+
+    return category, ext
 
 
 async def _ai_generate_json(
@@ -469,10 +472,6 @@ def _deliver_artifact(snapshot: dict, artifact_path: str) -> None:
             )
         finally:
             await adapter.aclose()
-            try:
-                os.unlink(artifact_path)
-            except OSError:
-                logger.warning("Failed to cleanup artifact: %s", artifact_path)
             try:
                 os.unlink(artifact_path)
             except OSError:

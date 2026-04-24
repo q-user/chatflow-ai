@@ -29,8 +29,11 @@ class YandexAdapter(BaseHttpAdapter, IMessengerAdapter):
         http = await self._get_http_client()
         url = f"{self.BASE_URL}/messages/sendText/"
         payload = {"chat_id": chat_id, "text": text}
-        resp = await http.post(url, json=payload, headers=self._headers())
-        resp.raise_for_status()
+        try:
+            resp = await http.post(url, json=payload, headers=self._headers())
+            resp.raise_for_status()
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error sending text message: {e}") from e
 
     # ── Stubs ─────────────────────────────────────
 

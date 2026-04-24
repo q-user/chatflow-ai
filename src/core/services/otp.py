@@ -82,16 +82,18 @@ class OTPService:
         :returns: user_id if code is valid, None otherwise.
         """
         reverse_key = f"otp_reverse:{code}"
-        user_id_bytes = await self._redis.getdel(reverse_key)
+        lua_script = """
+        local user_id = redis.call('GETDEL', KEYS[1])
+        if user_id then
+            redis.call('DEL', 'otp:' .. user_id)
+        end
+        return user_id
+        """
+        user_id_bytes = await self._redis.eval(lua_script, 1, reverse_key)
         if user_id_bytes is None:
             return None
 
-        user_id = uuid.UUID(user_id_bytes.decode())
-
-        # Also delete the forward key to prevent web cabinet replay
-        await self._redis.delete(f"otp:{user_id}")
-
-        return user_id
+        return uuid.UUID(user_id_bytes.decode())
 
     @staticmethod
     def _generate_code() -> str:

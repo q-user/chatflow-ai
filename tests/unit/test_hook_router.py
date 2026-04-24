@@ -492,3 +492,32 @@ async def test_process_webhook_known_user_text_idle(
     mock_adapter.send_text.assert_called_once()
     call_args = mock_adapter.send_text.call_args
     assert "/new" in call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_process_webhook_adapter_closed(
+    hook_router: HookRouterService,
+    test_bot_instance: BotInstanceTable,
+    mock_adapter,
+):
+    """Adapter must be closed regardless of outcome."""
+    # Case 1: Success
+    payload = {
+        "message": {
+            "chat": {"id": 123},
+            "from": {"id": 456},
+            "text": "hello",
+        }
+    }
+    await hook_router.process_webhook(
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
+    )
+    assert mock_adapter.aclose.call_count == 1
+
+    # Case 2: Invalid payload (failure)
+    mock_adapter.aclose.reset_mock()
+    mock_adapter.parse_webhook.side_effect = ValueError("Invalid")
+    await hook_router.process_webhook(
+        "TG", uuid.UUID(str(test_bot_instance.id)), payload
+    )
+    assert mock_adapter.aclose.call_count == 1

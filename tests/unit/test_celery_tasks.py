@@ -3,7 +3,7 @@
 import csv
 import os
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
@@ -196,67 +196,33 @@ def test_deliver_artifact_missing_fields():
 
 
 # ──────────────────────────────────────────────
-# _mime_to_ext tests (Ticket 4.3)
+# _get_file_info tests (Merged from mime_to_ext and classify_file)
 # ──────────────────────────────────────────────
 
 
-def test_mime_to_ext_known_types():
-    """_mime_to_ext maps known MIME types to extensions."""
-    from infrastructure.task_queue.tasks import _mime_to_ext
+def test_get_file_info_known_types():
+    """_get_file_info maps known MIME types to extensions and categories."""
+    from infrastructure.task_queue.tasks import _get_file_info
 
     # Images
-    assert _mime_to_ext("image/jpeg") == ".jpg"
-    assert _mime_to_ext("image/png") == ".png"
-    assert _mime_to_ext("image/gif") == ".gif"
-    assert _mime_to_ext("image/webp") == ".webp"
+    assert _get_file_info("image/jpeg") == ("image", ".jpg")
+    assert _get_file_info("image/png") == ("image", ".png")
+    assert _get_file_info("image/gif") == ("image", ".gif")
+    assert _get_file_info("image/webp") == ("image", ".webp")
     # Audio
-    assert _mime_to_ext("audio/ogg") == ".ogg"
-    assert _mime_to_ext("audio/mpeg") == ".mp3"
-    assert _mime_to_ext("audio/wav") == ".wav"
+    assert _get_file_info("audio/ogg") == ("audio", ".ogg")
+    assert _get_file_info("audio/mpeg") == ("audio", ".mp3")
+    assert _get_file_info("audio/wav") == ("audio", ".wav")
     # Documents
-    assert _mime_to_ext("application/pdf") == ".pdf"
+    assert _get_file_info("application/pdf") == ("document", ".pdf")
 
 
-def test_mime_to_ext_unknown_type():
-    """_mime_to_ext defaults to .bin for unknown MIME types."""
-    from infrastructure.task_queue.tasks import _mime_to_ext
+def test_get_file_info_unknown_type():
+    """_get_file_info defaults to (.bin, 'unknown') for unknown MIME types."""
+    from infrastructure.task_queue.tasks import _get_file_info
 
-    assert _mime_to_ext("unknown/type") == ".bin"
-    assert _mime_to_ext("text/plain") == ".bin"
-
-
-# ──────────────────────────────────────────────
-# _classify_file tests (Ticket 4.3)
-# ──────────────────────────────────────────────
-
-
-def test_classify_file_image():
-    """_classify_file returns 'image' for image MIME types."""
-    from infrastructure.task_queue.tasks import _classify_file
-
-    assert _classify_file("image/jpeg") == "image"
-
-
-def test_classify_file_audio():
-    """_classify_file returns 'audio' for audio MIME types."""
-    from infrastructure.task_queue.tasks import _classify_file
-
-    assert _classify_file("audio/ogg") == "audio"
-
-
-def test_classify_file_document():
-    """_classify_file returns 'document' for document MIME types."""
-    from infrastructure.task_queue.tasks import _classify_file
-
-    assert _classify_file("application/pdf") == "document"
-
-
-def test_classify_file_unknown():
-    """_classify_file returns 'unknown' for unrecognised MIME types."""
-    from infrastructure.task_queue.tasks import _classify_file
-
-    assert _classify_file("text/plain") == "unknown"
-    assert _classify_file(None) == "unknown"
+    assert _get_file_info("unknown/type") == ("unknown", ".bin")
+    assert _get_file_info("text/plain") == ("unknown", ".bin")
 
 
 # ──────────────────────────────────────────────
@@ -600,3 +566,53 @@ async def test_finance_ai_pipeline_with_audio_and_document():
     call_kwargs = mock_ai.generate_json.call_args[1]
     assert "Транскрипция аудио" in call_kwargs["text"]
     assert "Содержимое документа" in call_kwargs["text"]
+
+
+def test_deliver_artifact_cleanup_once():
+    """_deliver_artifact deletes the artifact exactly once."""
+    from infrastructure.task_queue.tasks import _deliver_artifact
+
+    mock_adapter = AsyncMock()
+    mock_adapter.aclose = AsyncMock()
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        snapshot = {
+            "bot_token": "test_token",
+            "messenger_type": "TG",
+            "chat_id": "123456",
+        }
+        _deliver_artifact(snapshot, "/tmp/test_file.csv")
+
+    mock_unlink.assert_called_once_with("/tmp/test_file.csv")
+
+
+@pytest.mark.asyncio
+async def test_compile_session_value_error_no_retry():
+    """compile_session should propagate ValueError without manual retry."""
+    from infrastructure.task_queue.tasks import compile_session
+
+    with patch(
+        "infrastructure.task_queue.tasks._get_module_handler"
+    ) as mock_get_handler:
+        mock_handler = MagicMock()
+        mock_handler.side_effect = ValueError("Invalid data")
+        mock_get_handler.return_value = mock_handler
+
+        with (
+            patch("infrastructure.task_queue.tasks.sync_session_factory"),
+            patch("infrastructure.task_queue.tasks._init_sync_engine"),
+        ):
+            snapshot = {
+                "company_id": uuid.uuid4(),
+                "user_id": uuid.uuid4(),
+                "bot_instance_id": uuid.uuid4(),
+                "module_type": "finance",
+            }
+
+            with pytest.raises(ValueError, match="Invalid data"):
+                compile_session(snapshot)

@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from core.interfaces.ai import AIServiceError, IMultiModalAI
+from infrastructure.messengers.base import BaseHttpAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ COT_TOKEN = "<|think|>"
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
 
-class OpenRouterAdapter(IMultiModalAI):
+class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
     """OpenAI-compatible adapter optimized for Gemma 4 via OpenRouter.
 
     Key Gemma 4 specifics:
@@ -48,25 +49,12 @@ class OpenRouterAdapter(IMultiModalAI):
         timeout: float = 120.0,
         generation_params: dict[str, Any] | None = None,
     ) -> None:
+        super().__init__(http_client, timeout=timeout)
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout = timeout
         self._gen_params = generation_params or GEMMA4_DEFAULT_PARAMS
-        self._http: httpx.AsyncClient | None = http_client
-        self._owns_client = http_client is None
-
-    async def _get_http_client(self) -> httpx.AsyncClient:
-        """Lazy httpx client creation."""
-        if self._http is None:
-            self._http = httpx.AsyncClient(timeout=self._timeout)
-        return self._http
-
-    async def aclose(self) -> None:
-        """Close the underlying httpx client if we created it."""
-        if self._owns_client and self._http is not None:
-            await self._http.aclose()
-            self._http = None
 
     # ──────────────────────────────────────────────
     # IMultiModalAI implementation

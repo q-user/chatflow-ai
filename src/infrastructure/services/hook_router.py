@@ -82,28 +82,31 @@ class HookRouterService:
         # 3. Create adapter for this bot instance (lazy creation)
         adapter = create_adapter(messenger_type, bot.token)
 
-        # 4. Parse payload via adapter
         try:
-            envelope = await adapter.parse_webhook(payload, bot.token)
-        except (ValueError, KeyError) as e:
-            logger.warning("Failed to parse webhook: %s", e)
-            return 400, "Invalid webhook payload"
+            # 4. Parse payload via adapter
+            try:
+                envelope = await adapter.parse_webhook(payload, bot.token)
+            except (ValueError, KeyError) as e:
+                logger.warning("Failed to parse webhook: %s", e)
+                return 400, "Invalid webhook payload"
 
-        # 5. Inject real bot_instance_id (adapter uses placeholder)
-        # Use model_copy for immutability instead of direct mutation
-        envelope = envelope.model_copy(
-            update={"bot_instance_id": uuid.UUID(str(bot.id))}
-        )
+            # 5. Inject real bot_instance_id (adapter uses placeholder)
+            # Use model_copy for immutability instead of direct mutation
+            envelope = envelope.model_copy(
+                update={"bot_instance_id": uuid.UUID(str(bot.id))}
+            )
 
-        # 6. Resolve user
-        user = await self._resolve_user(envelope, uuid.UUID(str(bot.company_id)))
-        if user is None:
-            await self._handle_unknown_user(envelope, bot, adapter)
+            # 6. Resolve user
+            user = await self._resolve_user(envelope, uuid.UUID(str(bot.company_id)))
+            if user is None:
+                await self._handle_unknown_user(envelope, bot, adapter)
+                return 200, "OK"
+
+            # 7. Dispatch to session FSM
+            await self._dispatch_to_session(envelope, user, bot, adapter)
             return 200, "OK"
-
-        # 7. Dispatch to session FSM
-        await self._dispatch_to_session(envelope, user, bot, adapter)
-        return 200, "OK"
+        finally:
+            await adapter.aclose()
 
     # ──────────────────────────────────────────────
     # Internal pipeline
@@ -132,7 +135,10 @@ class HookRouterService:
     ) -> None:
         """OTP-intercept: if 6 digits → verify and link, else → prompt."""
         if not envelope.is_otp_pattern:
-            await adapter.send_text(envelope.chat_id, UNLINKED_PROMPT)
+            try:
+                await adapter.send_text(envelope.chat_id, UNLINKED_PROMPT)
+            except ValueError:
+                logger.warning("Failed to send unlinked prompt")
             return
 
         assert envelope.text is not None  # is_otp_pattern guarantees text
@@ -144,10 +150,22 @@ class HookRouterService:
             envelope.messenger_user_id,
         )
 
-        if user_id is not None:
-            await adapter.send_text(envelope.chat_id, OTP_SUCCESS)
-        else:
-            await adapter.send_text(envelope.chat_id, OTP_FAILURE)
+        try:
+            if user_id is not None:
+                await adapter.send_text(envelope.chat_id, OTP_SUCCESS)
+            else:
+                await adapter.send_text(envelope.chat_id, OTP_FAILURE)
+        except ValueError:
+            logger.warning("Failed to send OTP result message")
+
+    async def _safe_send(
+        self, adapter: IMessengerAdapter, chat_id: str, text: str
+    ) -> None:
+        """Send text message, logging network errors instead of propagating."""
+        try:
+            await adapter.send_text(chat_id, text)
+        except ValueError as e:
+            logger.warning("Failed to send message to chat %s: %s", chat_id, e)
 
     async def _dispatch_to_session(
         self,
@@ -159,14 +177,18 @@ class HookRouterService:
         """Route to SessionService based on command/payload."""
         # Answer callback first (dismiss button loading state)
         if envelope.is_callback and envelope.raw_callback_id:
-            await adapter.answer_callback(envelope.raw_callback_id)
+            try:
+                await adapter.answer_callback(envelope.raw_callback_id)
+            except ValueError:
+                logger.warning("Failed to answer callback")
 
         state = await self._session_service.get_state(user.id)
 
         if envelope.is_command:
             if envelope.text == "/new":
                 await self._session_service.handle_new(user.id)
-                await adapter.send_text(
+                await self._safe_send(
+                    adapter,
                     envelope.chat_id,
                     "Сессия начата. Отправляйте данные — текст и файлы будут накоплены. "
                     "Отправьте /compile для завершения.",
@@ -176,7 +198,8 @@ class HookRouterService:
             if envelope.text == "/compile":
                 snapshot = await self._session_service.handle_compile(user.id)
                 if snapshot is None:
-                    await adapter.send_text(
+                    await self._safe_send(
+                        adapter,
                         envelope.chat_id,
                         "Нет активной сессии. Отправьте /new для начала.",
                     )
@@ -203,19 +226,22 @@ class HookRouterService:
                     )
                 except OperationalError:
                     logger.exception("Celery broker unavailable")
-                    await adapter.send_text(
+                    await self._safe_send(
+                        adapter,
                         envelope.chat_id,
                         "Система временно недоступна. Попробуйте позже.",
                     )
                     return
 
-                await adapter.send_text(
+                await self._safe_send(
+                    adapter,
                     envelope.chat_id,
                     f"Принято {len(snapshot.items)} элементов. Обрабатываю...",
                 )
                 return
 
-            await adapter.send_text(
+            await self._safe_send(
+                adapter,
                 envelope.chat_id,
                 "Неизвестная команда. Доступные: /new, /compile",
             )
@@ -227,12 +253,14 @@ class HookRouterService:
             count = await self._redis.llen(  # ty: ignore[invalid-await]
                 f"session:{user.id}:payload"
             )
-            await adapter.send_text(
+            await self._safe_send(
+                adapter,
                 envelope.chat_id,
                 f"Принято ({count}). Отправьте /compile для завершения.",
             )
         else:
-            await adapter.send_text(
+            await self._safe_send(
+                adapter,
                 envelope.chat_id,
                 "Отправьте /new для начала новой сессии.",
             )

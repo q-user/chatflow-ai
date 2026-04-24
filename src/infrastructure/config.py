@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     secret_key: str = ""
     bot_api_key: str = ""
 
-    # Messenger proxy (used for Telegram and Yandex)
-    telegram_proxy: str | None = None
+    # HTTP proxy (used for Telegram, Yandex, AI and STT)
+    http_proxy: str | None = None
 
     # AI Provider (OpenAI-compatible API format)
     ai_api_key: str = ""  # OpenRouter / Google AI Studio key
