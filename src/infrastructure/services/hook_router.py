@@ -8,7 +8,7 @@ This service lives in infrastructure because it depends on SQLAlchemy models.
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 from kombu.exceptions import OperationalError
 from redis.asyncio import Redis
@@ -25,6 +25,17 @@ from infrastructure.database.models.user import UserTable
 from infrastructure.messengers import create_adapter
 from infrastructure.services.messenger_link import MessengerLinkService
 from infrastructure.task_queue.celery_app import celery_app
+
+# ============================================================
+# Dependency Injection: AdapterFactory
+# ============================================================
+
+AdapterFactory = Callable[[str, str], IMessengerAdapter]
+
+
+async def get_adapter_factory() -> AdapterFactory:
+    """FastAPI dependency: provides the adapter factory."""
+    return create_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +57,14 @@ class HookRouterService:
         otp_service: OTPService,
         session_service: SessionService,
         messenger_link_service: MessengerLinkService,
+        adapter_factory: AdapterFactory = create_adapter,
     ) -> None:
         self._session = session
         self._redis = redis
         self._otp_service = otp_service
         self._session_service = session_service
         self._messenger_link_service = messenger_link_service
+        self._adapter_factory = adapter_factory
 
     # ──────────────────────────────────────────────
     # Public API
@@ -80,7 +93,7 @@ class HookRouterService:
             return 403, "Bot instance is inactive"
 
         # 3. Create adapter for this bot instance (lazy creation)
-        adapter = create_adapter(messenger_type, bot.token)
+        adapter = self._adapter_factory(messenger_type, bot.token)
 
         try:
             # 4. Parse payload via adapter

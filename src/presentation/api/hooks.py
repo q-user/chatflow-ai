@@ -47,6 +47,31 @@ async def get_messenger_link_service(
     return MessengerLinkService(otp_service, session)
 
 
+async def get_adapter_factory_from_hook_router():
+    """FastAPI dependency: provides the adapter factory for hook_router."""
+    from infrastructure.services.hook_router import get_adapter_factory as haf
+    return await haf()
+
+
+async def get_hook_router_service(
+    session: AsyncSession = Depends(get_db_session),
+    redis_client: Redis = Depends(get_redis_client),
+    otp_service: OTPService = Depends(get_otp_service),
+    session_service: SessionService = Depends(get_session_service),
+    messenger_link_service: MessengerLinkService = Depends(get_messenger_link_service),
+    adapter_factory = Depends(get_adapter_factory_from_hook_router),
+) -> HookRouterService:
+    """Provide HookRouterService with adapter factory injection."""
+    return HookRouterService(
+        session=session,
+        redis=redis_client,
+        otp_service=otp_service,
+        session_service=session_service,
+        messenger_link_service=messenger_link_service,
+        adapter_factory=adapter_factory,
+    )
+
+
 @hooks_router.post(
     "/{messenger_type}/{bot_uuid}",
     status_code=status.HTTP_200_OK,
@@ -58,10 +83,7 @@ async def handle_webhook(
     bot_uuid: uuid.UUID,
     payload: dict,
     x_max_bot_api_secret: str | None = Header(None),
-    session: AsyncSession = Depends(get_db_session),
-    otp_service: OTPService = Depends(get_otp_service),
-    session_service: SessionService = Depends(get_session_service),
-    messenger_link_service: MessengerLinkService = Depends(get_messenger_link_service),
+    hook_service: HookRouterService = Depends(get_hook_router_service),
 ) -> dict[str, str]:
     """Dynamic webhook handler.
 
@@ -77,20 +99,15 @@ async def handle_webhook(
 
     Always returns 200 immediately (Telegram requires response within 60s).
     """
-    hook_service = HookRouterService(
-        session=session,
-        redis=redis,
-        otp_service=otp_service,
-        session_service=session_service,
-        messenger_link_service=messenger_link_service,
-    )
-
     # Verify MAX webhook secret if present
     if messenger_type == "MX" and x_max_bot_api_secret is not None:
         from infrastructure.database.models.bot_instance import BotInstanceTable
-        bot = await session.get(BotInstanceTable, bot_uuid)
-        if bot is None or bot.secret != x_max_bot_api_secret:
-            return {"status": "rejected"}
+        from infrastructure.database.session import get_db_session as get_sync_db
+        async for session in get_sync_db():
+            bot = await session.get(BotInstanceTable, bot_uuid)
+            if bot is None or bot.secret != x_max_bot_api_secret:
+                return {"status": "rejected"}
+            break
 
     status_code, message = await hook_service.process_webhook(
         messenger_type, bot_uuid, payload

@@ -2,6 +2,7 @@
 
 import uuid
 from pathlib import Path
+from typing import Callable
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -21,6 +22,17 @@ from core.interfaces.messenger import IMessengerAdapter
 from presentation.api.otp import get_otp_service
 from core.services.otp import OTPService, RateLimitExceeded
 
+# ============================================================
+# Dependency Injection: AdapterFactory
+# ============================================================
+
+AdapterFactory = Callable[[str, str], IMessengerAdapter]
+
+
+async def get_adapter_factory() -> AdapterFactory:
+    """FastAPI dependency: provides the adapter factory."""
+    return create_adapter
+
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -37,22 +49,6 @@ templates = Jinja2Templates(env=env)
 
 # Valid values for form fields
 ALLOWED_MESSENGER_TYPES = {"TG", "YM", "MX"}
-
-
-def _default_create_adapter(messenger_type: str, token: str) -> IMessengerAdapter:
-    """Default adapter factory — uses the registry.
-
-    Override via app.dependency_overrides[get_adapter] for testing.
-    """
-    return create_adapter(messenger_type, token)
-
-
-async def get_adapter(
-    messenger_type: str,
-    token: str,
-) -> IMessengerAdapter:
-    """FastAPI dependency: creates a messenger adapter by type and token."""
-    return _default_create_adapter(messenger_type, token)
 
 
 def get_available_modules_for(
@@ -157,6 +153,7 @@ async def create_bot(
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
+    adapter_factory: AdapterFactory = Depends(get_adapter_factory),
 ):
     """Create BotInstance with webhook registration before DB insert.
 
@@ -171,7 +168,7 @@ async def create_bot(
     :param messenger_type: "TG", "MX".
     :param module_type: "finance", "estimator", "hr".
     :param secret: Optional webhook secret (MAX only).
-    :param adapter: Injectable messenger adapter (overridden in tests).
+    :param adapter_factory: Injectable adapter factory (overridden in tests).
     """
     if messenger_type not in ALLOWED_MESSENGER_TYPES:
         raise HTTPException(400, f"Invalid messenger_type: {messenger_type}")
@@ -195,8 +192,8 @@ async def create_bot(
     bot_id = uuid.uuid4()
     webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
 
-    # Create adapter from Form params (not Depends — Form fields aren't query params)
-    adapter = _default_create_adapter(messenger_type, token)
+    # Create adapter from factory
+    adapter = adapter_factory(messenger_type, token)
 
     try:
         await adapter.register_webhook(webhook_url, secret=secret)

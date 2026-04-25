@@ -163,19 +163,21 @@ async def client(
     async def override_get_otp_service() -> OTPService:
         return OTPService(fake_redis)
 
+    # Adapter factory for pages.create_bot
+    def mock_adapter_factory(messenger_type: str, token: str) -> IMessengerAdapter:
+        return mock_adapter
+
     app.dependency_overrides[get_db_session] = override_get_db
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # Override adapter factory (used directly in create_bot, not via Depends)
-    import presentation.web.pages as pages_module
+    # Override adapter factory dependency in pages module
+    from presentation.web import pages as pages_module
+    app.dependency_overrides[pages_module.get_adapter_factory] = lambda: mock_adapter_factory
 
-    original_create_adapter = pages_module._default_create_adapter
-
-    def _override_create_adapter(messenger_type: str, token: str) -> IMessengerAdapter:
-        return mock_adapter
-
-    pages_module._default_create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
+    # Override adapter factory dependency in hooks module  
+    from presentation.api import hooks as hooks_module
+    app.dependency_overrides[hooks_module.get_adapter_factory_from_hook_router] = lambda: mock_adapter_factory
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -183,7 +185,6 @@ async def client(
         yield ac
 
     app.dependency_overrides.clear()
-    pages_module._default_create_adapter = original_create_adapter
 
 
 @pytest_asyncio.fixture
@@ -392,51 +393,17 @@ async def hooks_client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # For hooks endpoint — inject mock_adapter into hooks.py
-    from presentation.api import hooks as hooks_module
-
-    async def override_get_messenger_link_service_for_hooks() -> MessengerLinkService:
-        return messenger_link_service
-
-    async def override_get_session_service_for_hooks() -> SessionService:
-        return session_service
-
-    async def override_get_otp_service_for_hooks() -> OTPService:
-        return otp_service
-
-    async def override_get_db_for_hooks():
-        yield db_session
-
-    async def _override_get_db_session():
-        yield db_session
-
-    hooks_module.get_db_session = _override_get_db_session  # ty: ignore[invalid-assignment]
-
-    from presentation.api.hooks import (
-        get_messenger_link_service,
-        get_otp_service as hooks_get_otp_service,
-        get_session_service,
-    )
-
-    app.dependency_overrides[get_messenger_link_service] = (
-        override_get_messenger_link_service_for_hooks
-    )
-    app.dependency_overrides[hooks_get_otp_service] = override_get_otp_service_for_hooks
-    app.dependency_overrides[get_session_service] = (
-        override_get_session_service_for_hooks
-    )
-
-    # Override adapter creation in hook_router (where create_adapter is imported)
-    import infrastructure.services.hook_router as hook_router_module
-
-    original_create_adapter = hook_router_module.create_adapter
-
-    def _override_create_adapter(
-        messenger_type: str, bot_token: str
-    ) -> IMessengerAdapter:
+    # Adapter factory for hook_router
+    def mock_adapter_factory(messenger_type: str, bot_token: str) -> IMessengerAdapter:
         return mock_adapter
 
-    hook_router_module.create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
+    # Override adapter factory dependency in hook_router module
+    from infrastructure.services import hook_router as hook_router_module
+    app.dependency_overrides[hook_router_module.get_adapter_factory] = lambda: mock_adapter_factory
+
+    # Also override the wrapper dependency in hooks module
+    from presentation.api import hooks as hooks_module
+    app.dependency_overrides[hooks_module.get_adapter_factory_from_hook_router] = lambda: mock_adapter_factory
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -444,4 +411,3 @@ async def hooks_client(
         yield ac
 
     app.dependency_overrides.clear()
-    hook_router_module.create_adapter = original_create_adapter

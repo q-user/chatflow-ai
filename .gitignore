@@ -1,49 +1,49 @@
 ```
-# Compiled Python files
-*.pyc
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Dependencies
-.venv/
-venv/
-node_modules/
-
-# Logs and temporary files
-*.log
-*.tmp
-*.swp
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-.gemini/
-.qwen/
-.kilo
-
-# Coverage reports
+# Testing
 .coverage
 coverage/
 htmlcov/
+.nosetests
+.pytest_cache/
 
-# Build artifacts
-dist/
-build/
-target/
-*.class
-*.o
-*.obj
-*.out
+# Environment
+.env
+.env.local
+.env.*
+.venv/
+venv/
+ENV/
 
-# OS generated files
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
 .DS_Store
 Thumbs.db
-
-# Testing
-.pytest_cache/
-.mypy_cache/
 ```
