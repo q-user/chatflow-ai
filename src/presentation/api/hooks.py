@@ -6,7 +6,7 @@ Routes to the correct adapter, parses payload, and dispatches to session FSM.
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +57,7 @@ async def handle_webhook(
     messenger_type: str,
     bot_uuid: uuid.UUID,
     payload: dict,
+    x_max_bot_api_secret: str | None = Header(None),
     session: AsyncSession = Depends(get_db_session),
     otp_service: OTPService = Depends(get_otp_service),
     session_service: SessionService = Depends(get_session_service),
@@ -83,6 +84,13 @@ async def handle_webhook(
         session_service=session_service,
         messenger_link_service=messenger_link_service,
     )
+
+    # Verify MAX webhook secret if present
+    if messenger_type == "MX" and x_max_bot_api_secret is not None:
+        from infrastructure.database.models.bot_instance import BotInstanceTable
+        bot = await session.get(BotInstanceTable, bot_uuid)
+        if bot is None or bot.secret != x_max_bot_api_secret:
+            return {"status": "rejected"}
 
     status_code, message = await hook_service.process_webhook(
         messenger_type, bot_uuid, payload
