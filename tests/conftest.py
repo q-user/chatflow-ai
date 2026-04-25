@@ -167,10 +167,15 @@ async def client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # Override adapter via FastAPI dependency
-    from presentation.web.pages import get_adapter
+    # Override adapter factory (used directly in create_bot, not via Depends)
+    import presentation.web.pages as pages_module
 
-    app.dependency_overrides[get_adapter] = lambda: mock_adapter
+    original_create_adapter = pages_module._default_create_adapter
+
+    def _override_create_adapter(messenger_type: str, token: str) -> IMessengerAdapter:
+        return mock_adapter
+
+    pages_module._default_create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -178,6 +183,7 @@ async def client(
         yield ac
 
     app.dependency_overrides.clear()
+    pages_module._default_create_adapter = original_create_adapter
 
 
 @pytest_asyncio.fixture
