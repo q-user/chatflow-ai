@@ -153,11 +153,10 @@ async def create_bot(
     token: str = Form(...),
     messenger_type: str = Form(...),
     module_type: str = Form(...),
-    secret: str | None = Form(None),
+    secret: str | None = Form(default=None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
-    adapter: IMessengerAdapter = Depends(get_adapter),
 ):
     """Create BotInstance with webhook registration before DB insert.
 
@@ -185,12 +184,19 @@ async def create_bot(
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
 
+    # Normalize empty secret to None (HTML form sends "" for empty fields)
+    if secret is not None and not secret.strip():
+        secret = None
+
     # Auto-generate secret for MAX bots (required for webhook verification)
     if messenger_type == "MX" and not secret:
         secret = uuid.uuid4().hex
 
     bot_id = uuid.uuid4()
     webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
+
+    # Create adapter from Form params (not Depends — Form fields aren't query params)
+    adapter = _default_create_adapter(messenger_type, token)
 
     try:
         await adapter.register_webhook(webhook_url, secret=secret)
