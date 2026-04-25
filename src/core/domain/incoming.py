@@ -12,7 +12,7 @@ class IncomingEnvelope(BaseModel):
     This is the contract between messenger adapters and the application core.
     """
 
-    messenger_user_id: str  # telegram_id / yandex_id
+    messenger_user_id: str  # telegram_id / yandex_id / max_id
     chat_id: str  # chat/group ID for replies
     text: str | None = None  # message text (or command / callback_data)
     file_id: str | None = None  # file ID in the messenger

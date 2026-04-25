@@ -15,3 +15,4 @@ class User(BaseModel):
     is_verified: bool = False
     telegram_id: str | None = None
     yandex_id: str | None = None
+    max_id: str | None = None

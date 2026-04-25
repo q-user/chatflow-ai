@@ -25,6 +25,9 @@ class UserTable(SQLAlchemyBaseUserTableUUID, Base):
     yandex_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, nullable=True
     )
+    max_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, index=True, nullable=True
+    )
 
     # relationships
     company: Mapped["CompanyTable"] = relationship(back_populates="users")

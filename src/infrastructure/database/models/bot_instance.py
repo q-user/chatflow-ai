@@ -37,7 +37,7 @@ class BotInstanceTable(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "messenger_type IN ('TG', 'YM')", name="ck_bot_instances_messenger_type"
+            "messenger_type IN ('TG', 'YM', 'MX')", name="ck_bot_instances_messenger_type"
         ),
     )
 

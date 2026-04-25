@@ -1,6 +1,7 @@
 """Messenger adapter registry and factory."""
 
 from core.interfaces.messenger import IMessengerAdapter
+from infrastructure.messengers.max import MaxAdapter
 from infrastructure.messengers.telegram import TelegramAdapter
 from infrastructure.messengers.yandex import YandexAdapter
 
@@ -15,13 +16,14 @@ class UnsupportedMessengerError(ValueError):
 ADAPTER_REGISTRY: dict[str, type[IMessengerAdapter]] = {
     "TG": TelegramAdapter,
     "YM": YandexAdapter,
+    "MX": MaxAdapter,
 }
 
 
 def create_adapter(messenger_type: str, bot_token: str) -> IMessengerAdapter:
     """Create a messenger adapter by type and bot token.
 
-    :param messenger_type: "TG", "YM", etc.
+    :param messenger_type: "TG", "YM", "MX", etc.
     :param bot_token: Bot API token for this instance.
     :returns: Configured adapter instance.
     :raises UnsupportedMessengerError: If messenger_type is not registered.

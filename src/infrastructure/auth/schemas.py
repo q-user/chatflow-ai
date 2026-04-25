@@ -17,6 +17,7 @@ class UserRead(BaseUser):
     is_verified: bool = False
     telegram_id: str | None = None
     yandex_id: str | None = None
+    max_id: str | None = None
 
 
 class UserCreate(BaseUserCreate):
@@ -50,6 +51,7 @@ class UserUpdate(BaseUserUpdate):
     company_id: UUID4 | None = None
     telegram_id: str | None = None
     yandex_id: str | None = None
+    max_id: str | None = None
 
 
 class OTPGenerateResponse(BaseModel):
@@ -68,4 +70,4 @@ class OTPVerifyRequest(BaseModel):
 
     code: str
     messenger_id: str
-    messenger_type: Literal["TG", "YM"]
+    messenger_type: Literal["TG", "YM", "MX"]

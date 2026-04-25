@@ -10,6 +10,7 @@ from typing import Literal
 MESSENGER_TYPE_TO_FIELD: dict[str, str] = {
     "TG": "telegram_id",
     "YM": "yandex_id",
+    "MX": "max_id",
 }
 
-MessengerType = Literal["TG", "YM"]
+MessengerType = Literal["TG", "YM", "MX"]

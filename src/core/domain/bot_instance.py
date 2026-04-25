@@ -8,7 +8,7 @@ class BotInstance(BaseModel):
 
     id: UUID4 | None = None
     company_id: UUID4
-    messenger_type: str  # TG / YM
+    messenger_type: str  # TG / YM / MX
     token: str
     status: str = "active"  # active / inactive
     module_type: str = "finance"  # finance, estimator, hr, etc.
