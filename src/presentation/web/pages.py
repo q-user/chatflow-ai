@@ -185,6 +185,10 @@ async def create_bot(
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
 
+    # Auto-generate secret for MAX bots (required for webhook verification)
+    if messenger_type == "MX" and not secret:
+        secret = uuid.uuid4().hex
+
     bot_id = uuid.uuid4()
     webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
 
