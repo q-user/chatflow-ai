@@ -36,7 +36,7 @@ router = APIRouter()
 templates = Jinja2Templates(env=env)
 
 # Valid values for form fields
-ALLOWED_MESSENGER_TYPES = {"TG", "MX"}
+ALLOWED_MESSENGER_TYPES = {"TG", "YM", "MX"}
 
 
 def _default_create_adapter(messenger_type: str, token: str) -> IMessengerAdapter:
