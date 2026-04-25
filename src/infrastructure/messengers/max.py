@@ -319,19 +319,22 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
         except httpx.RequestError as e:
             raise ValueError(f"Network error downloading file: {e}") from e
 
-    async def register_webhook(self, webhook_url: str) -> None:
+    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
         """Register a webhook via POST /subscriptions.
 
         :param webhook_url: Full public HTTPS URL for the webhook endpoint.
+        :param secret: Webhook secret for X-Max-Bot-Api-Secret verification.
         :raises ValueError: If token is invalid or MAX API rejects the request.
         """
         http = await self._get_http_client()
         url = f"{self.BASE_URL}/subscriptions"
 
-        body = {
+        body: dict[str, Any] = {
             "url": webhook_url,
             "update_types": ["message_created", "message_callback"],
         }
+        if secret:
+            body["secret"] = secret
 
         try:
             resp = await http.post(url, json=body, headers=self._headers())

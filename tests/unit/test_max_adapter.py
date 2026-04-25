@@ -349,6 +349,37 @@ async def test_register_webhook_success(max_adapter):
 
 
 @pytest.mark.asyncio
+async def test_register_webhook_with_secret(max_adapter):
+    """Verify register_webhook includes secret in body when provided."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.post.return_value = _mock_response(
+        json_data={"success": True}
+    )
+    max_adapter._http = mock_client
+
+    await max_adapter.register_webhook("https://example.com/hook", secret="my-secret")
+
+    call_args = mock_client.post.call_args
+    body = call_args[1]["json"]
+    assert body["secret"] == "my-secret"
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_without_secret(max_adapter):
+    """Verify register_webhook omits secret when not provided."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.post.return_value = _mock_response(
+        json_data={"success": True}
+    )
+    max_adapter._http = mock_client
+
+    await max_adapter.register_webhook("https://example.com/hook")
+
+    body = mock_client.post.call_args[1]["json"]
+    assert "secret" not in body
+
+
+@pytest.mark.asyncio
 async def test_register_webhook_rejected(max_adapter):
     """Verify register_webhook raises ValueError when API rejects."""
     mock_client = AsyncMock(spec=AsyncClient)

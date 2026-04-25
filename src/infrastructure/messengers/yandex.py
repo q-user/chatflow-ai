@@ -241,10 +241,11 @@ class YandexAdapter(BaseHttpAdapter, IMessengerAdapter):
         except httpx.RequestError as e:
             raise ValueError(f"Network error downloading file: {e}") from e
 
-    async def register_webhook(self, webhook_url: str) -> None:
+    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
         """Register a webhook URL via /self/update/.
 
         :param webhook_url: Full public URL for the webhook endpoint.
+        :param secret: Unused for Yandex (kept for interface compat).
         :raises ValueError: If token is invalid or Yandex API rejects the request.
         """
         http = await self._get_http_client()

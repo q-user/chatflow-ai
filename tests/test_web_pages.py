@@ -145,12 +145,12 @@ async def test_create_bot_webhook_failure_returns_400(
 async def test_create_bot_unsupported_messenger_returns_400(
     auth_client: AsyncClient,
 ):
-    """YM messenger type is not in ALLOWED_MESSENGER_TYPES → 400."""
+    """WA messenger type is not in ALLOWED_MESSENGER_TYPES → 400."""
     resp = await auth_client.post(
         "/bots",
         data={
             "token": "some_token",
-            "messenger_type": "YM",
+            "messenger_type": "WA",
             "module_type": "finance",
         },
     )

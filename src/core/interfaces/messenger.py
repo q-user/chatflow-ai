@@ -70,10 +70,11 @@ class IMessengerAdapter(ABC):
         """
         pass  # default: no-op
 
-    async def register_webhook(self, webhook_url: str) -> None:
+    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
         """Register a webhook URL with the messenger platform.
 
         :param webhook_url: Full public URL for the webhook endpoint.
+        :param secret: Optional webhook secret (e.g. MAX X-Max-Bot-Api-Secret).
         :raises ValueError: If token is invalid or platform rejects the request.
         """
         pass  # default: no-op — override in adapters that support it

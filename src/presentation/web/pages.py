@@ -153,6 +153,7 @@ async def create_bot(
     token: str = Form(...),
     messenger_type: str = Form(...),
     module_type: str = Form(...),
+    secret: str | None = Form(None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
@@ -168,8 +169,9 @@ async def create_bot(
     5. On success: create BotInstanceTable(id=bot_id) → commit → return table
 
     :param token: Bot API token.
-    :param messenger_type: "TG".
+    :param messenger_type: "TG", "MX".
     :param module_type: "finance", "estimator", "hr".
+    :param secret: Optional webhook secret (MAX only).
     :param adapter: Injectable messenger adapter (overridden in tests).
     """
     if messenger_type not in ALLOWED_MESSENGER_TYPES:
@@ -187,7 +189,7 @@ async def create_bot(
     webhook_url = f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
 
     try:
-        await adapter.register_webhook(webhook_url)
+        await adapter.register_webhook(webhook_url, secret=secret)
     except UnsupportedMessengerError as exc:
         raise HTTPException(501, f"Messenger type not yet supported: {exc}")
     except NotImplementedError as exc:
@@ -204,6 +206,7 @@ async def create_bot(
         messenger_type=messenger_type,
         module_type=module_type,
         status="active",
+        secret=secret,
     )
     session.add(bot)
     await session.commit()

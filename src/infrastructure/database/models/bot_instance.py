@@ -25,6 +25,7 @@ class BotInstanceTable(Base):
     )
     messenger_type: Mapped[str] = mapped_column(String(10), nullable=False)  # TG / YM
     token: Mapped[str] = mapped_column(String(512), nullable=False)  # bot API token
+    secret: Mapped[str | None] = mapped_column(String(512), nullable=True)  # webhook secret (MAX)
     status: Mapped[str] = mapped_column(
         String(20), default="active"
     )  # active / inactive
