@@ -35,7 +35,6 @@ class GroqWhisperAdapter(BaseHttpAdapter, ISpeechToText):
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
-        self._timeout = timeout
 
     async def transcribe(self, file_path: str, language: str = "ru") -> str:
         """Transcribe audio file via Groq Whisper API.

@@ -53,7 +53,6 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
-        self._timeout = timeout
         self._gen_params = generation_params or GEMMA4_DEFAULT_PARAMS
 
     # ──────────────────────────────────────────────

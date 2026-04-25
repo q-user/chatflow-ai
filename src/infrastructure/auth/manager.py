@@ -55,7 +55,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserTable, uuid.UUID]):
             user_create = UserCreate(
                 email=user_create.email,
                 password=user_create.password,
-                company_id=company_id,  # ty: ignore[invalid-argument-type]
+                company_id=uuid.UUID(str(company_id)),
                 company_name=user_create.company_name,
                 is_active=user_create.is_active,
                 is_superuser=user_create.is_superuser,
