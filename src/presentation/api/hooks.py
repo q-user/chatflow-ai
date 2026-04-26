@@ -14,7 +14,11 @@ from core.services.otp import OTPService
 from core.services.session import SessionService
 from infrastructure.database.session import get_db_session
 from infrastructure.redis import redis
-from infrastructure.services.hook_router import HookRouterService
+from infrastructure.services.hook_router import (
+    AdapterFactory,
+    HookRouterService,
+    get_adapter_factory,
+)
 from infrastructure.services.messenger_link import MessengerLinkService
 
 hooks_router = APIRouter(prefix="/api/v1/hooks", tags=["webhooks"])
@@ -47,19 +51,13 @@ async def get_messenger_link_service(
     return MessengerLinkService(otp_service, session)
 
 
-async def get_adapter_factory_from_hook_router():
-    """FastAPI dependency: provides the adapter factory for hook_router."""
-    from infrastructure.services.hook_router import get_adapter_factory as haf
-    return await haf()
-
-
 async def get_hook_router_service(
     session: AsyncSession = Depends(get_db_session),
     redis_client: Redis = Depends(get_redis_client),
     otp_service: OTPService = Depends(get_otp_service),
     session_service: SessionService = Depends(get_session_service),
     messenger_link_service: MessengerLinkService = Depends(get_messenger_link_service),
-    adapter_factory = Depends(get_adapter_factory_from_hook_router),
+    adapter_factory: AdapterFactory = Depends(get_adapter_factory),
 ) -> HookRouterService:
     """Provide HookRouterService with adapter factory injection."""
     return HookRouterService(

@@ -2,8 +2,6 @@
 
 import uuid
 from pathlib import Path
-from typing import Callable
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -17,21 +15,10 @@ from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.database.session import get_db_session
-from infrastructure.messengers import UnsupportedMessengerError, create_adapter
-from core.interfaces.messenger import IMessengerAdapter
+from infrastructure.messengers import UnsupportedMessengerError
+from infrastructure.services.hook_router import AdapterFactory, get_adapter_factory
 from presentation.api.otp import get_otp_service
 from core.services.otp import OTPService, RateLimitExceeded
-
-# ============================================================
-# Dependency Injection: AdapterFactory
-# ============================================================
-
-AdapterFactory = Callable[[str, str], IMessengerAdapter]
-
-
-async def get_adapter_factory() -> AdapterFactory:
-    """FastAPI dependency: provides the adapter factory."""
-    return create_adapter
 
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -157,15 +144,8 @@ async def create_bot(
 ):
     """Create BotInstance with webhook registration before DB insert.
 
-    Flow:
-    1. Validate messenger_type + module_type (unchanged)
-    2. Generate bot_id upfront
-    3. Build webhook_url from settings.domain
-    4. adapter → register_webhook → aclose (try/finally)
-    5. On success: create BotInstanceTable(id=bot_id) → commit → return table
-
     :param token: Bot API token.
-    :param messenger_type: "TG", "MX".
+    :param messenger_type: "TG", "YM", "MX".
     :param module_type: "finance", "estimator", "hr".
     :param secret: Optional webhook secret (MAX only).
     :param adapter_factory: Injectable adapter factory (overridden in tests).

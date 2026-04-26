@@ -163,7 +163,7 @@ async def client(
     async def override_get_otp_service() -> OTPService:
         return OTPService(fake_redis)
 
-    # Adapter factory for pages.create_bot
+    # Adapter factory (single source of truth in hook_router)
     def mock_adapter_factory(messenger_type: str, token: str) -> IMessengerAdapter:
         return mock_adapter
 
@@ -171,13 +171,8 @@ async def client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # Override adapter factory dependency in pages module
-    from presentation.web import pages as pages_module
-    app.dependency_overrides[pages_module.get_adapter_factory] = lambda: mock_adapter_factory
-
-    # Override adapter factory dependency in hooks module  
-    from presentation.api import hooks as hooks_module
-    app.dependency_overrides[hooks_module.get_adapter_factory_from_hook_router] = lambda: mock_adapter_factory
+    from infrastructure.services.hook_router import get_adapter_factory
+    app.dependency_overrides[get_adapter_factory] = lambda: mock_adapter_factory
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -393,17 +388,20 @@ async def hooks_client(
     app.dependency_overrides[get_user_db] = override_get_user_db
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
-    # Adapter factory for hook_router
+    # Override hooks service providers so HookRouterService gets test instances
+    from presentation.api.hooks import (
+        get_session_service as hooks_get_session_service,
+        get_messenger_link_service as hooks_get_messenger_link_service,
+    )
+    app.dependency_overrides[hooks_get_session_service] = override_get_session_service
+    app.dependency_overrides[hooks_get_messenger_link_service] = override_get_messenger_link_service
+
+    # Adapter factory (single source of truth in hook_router)
     def mock_adapter_factory(messenger_type: str, bot_token: str) -> IMessengerAdapter:
         return mock_adapter
 
-    # Override adapter factory dependency in hook_router module
-    from infrastructure.services import hook_router as hook_router_module
-    app.dependency_overrides[hook_router_module.get_adapter_factory] = lambda: mock_adapter_factory
-
-    # Also override the wrapper dependency in hooks module
-    from presentation.api import hooks as hooks_module
-    app.dependency_overrides[hooks_module.get_adapter_factory_from_hook_router] = lambda: mock_adapter_factory
+    from infrastructure.services.hook_router import get_adapter_factory
+    app.dependency_overrides[get_adapter_factory] = lambda: mock_adapter_factory
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

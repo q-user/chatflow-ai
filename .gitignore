@@ -1,49 +1,50 @@
 ```
-# Python
+# Compiled Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Testing
+# Dependencies
+.venv/
+venv/
+node_modules/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+.gemini/
+.qwen/
+.kilo
+
+# Coverage reports
 .coverage
 coverage/
 htmlcov/
-.nosetests
-.pytest_cache/
 
-# Environment
-.env
-.env.local
-.env.*
-.venv/
-venv/
-ENV/
+# Build artifacts
+dist/
+build/
+*.egg-info/
+target/
+*.class
+*.o
+*.obj
+*.out
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```
