@@ -280,7 +280,7 @@ async def _download_and_parse_media(
             try:
                 local_path = await adapter.download_file(file_id, dest)
             except Exception:
-                logger.warning("Failed to download file %s, skipping", file_id)
+                logger.warning("Failed to download file %s, skipping", file_id, exc_info=True)
                 continue
 
             # Route by category
@@ -349,7 +349,16 @@ async def _finance_ai_pipeline(
         full_text = combined_text
 
     if not full_text:
-        raise ValueError("No text data (neither messages nor media) for processing")
+        parts = []
+        if combined_text:
+            parts.append(f"message text ({len(combined_text)} chars)")
+        if file_items:
+            parts.append(f"{len(file_items)} file(s) failed to download or parse")
+        else:
+            parts.append("no files attached")
+        if not combined_text and not file_items:
+            parts.append("no text and no files")
+        raise ValueError(f"No text data for processing: {'; '.join(parts)}")
 
     try:
         return await _ai_generate_json(
