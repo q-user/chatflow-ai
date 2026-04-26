@@ -55,7 +55,6 @@ def hook_router(
     mock_adapter,
 ) -> Generator[HookRouterService, None, None]:
     """HookRouterService wired to mock adapter via adapter_factory injection."""
-    from infrastructure.services.hook_router import AdapterFactory
 
     def mock_adapter_factory(messenger_type: str, bot_token: str) -> IMessengerAdapter:
         return mock_adapter
