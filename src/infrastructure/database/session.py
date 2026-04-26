@@ -56,22 +56,34 @@ sync_session_factory: Any = None
 
 
 def _init_sync_engine() -> None:
-    """Initialize sync engine on first use."""
+    """Initialize sync engine on first use.
+
+    Raises RuntimeError if sync engine cannot be initialized
+    (e.g. missing psycopg2 driver in the environment).
+    """
     global sync_engine, sync_session_factory, _sync_url
 
     if sync_engine is not None:
         return
 
-    _sync_url = settings.database_sync_url or settings.database_url.replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
-    )
-    sync_engine = create_engine(
-        _sync_url,
-        echo=settings.debug,
-        pool_pre_ping=True,
-    )
-    sync_session_factory = sessionmaker(
-        bind=sync_engine,
-        class_=Session,
-        expire_on_commit=False,
-    )
+    try:
+        _sync_url = settings.database_sync_url or settings.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"
+        )
+        sync_engine = create_engine(
+            _sync_url,
+            echo=settings.debug,
+            pool_pre_ping=True,
+        )
+        sync_session_factory = sessionmaker(
+            bind=sync_engine,
+            class_=Session,
+            expire_on_commit=False,
+        )
+    except Exception as exc:
+        sync_engine = None
+        sync_session_factory = None
+        raise RuntimeError(
+            f"Failed to initialize sync DB engine: {exc}. "
+            "Ensure psycopg2-binary is installed and DATABASE_SYNC_URL is set correctly."
+        ) from exc
