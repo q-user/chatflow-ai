@@ -97,9 +97,9 @@ def test_celery_app_registered():
     assert celery_app.main == "worker"
 
 
-def test_dummy_task_registered():
-    """Dummy task is registered for health checks."""
-    assert celery_app.tasks.get("dummy_task") is not None
+def test_compile_session_task_registered():
+    """compile_session task is registered in Celery."""
+    assert celery_app.tasks.get("compile_session") is not None
 
 
 # ──────────────────────────────────────────────

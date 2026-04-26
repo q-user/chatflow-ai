@@ -54,17 +54,10 @@ def hook_router(
     messenger_link_service: MessengerLinkService,
     mock_adapter,
 ) -> Generator[HookRouterService, None, None]:
-    """HookRouterService wired to mock adapter and test dependencies."""
-    import infrastructure.services.hook_router as hook_router_module
+    """HookRouterService wired to mock adapter via adapter_factory injection."""
 
-    original_create = hook_router_module.create_adapter
-
-    def _override_create_adapter(
-        messenger_type: str, bot_token: str
-    ) -> IMessengerAdapter:
+    def mock_adapter_factory(messenger_type: str, bot_token: str) -> IMessengerAdapter:
         return mock_adapter
-
-    hook_router_module.create_adapter = _override_create_adapter  # ty: ignore[invalid-assignment]
 
     service = HookRouterService(
         session=db_session,
@@ -72,11 +65,10 @@ def hook_router(
         otp_service=otp_service,
         session_service=session_service,
         messenger_link_service=messenger_link_service,
+        adapter_factory=mock_adapter_factory,
     )
 
     yield service
-
-    hook_router_module.create_adapter = original_create
 
 
 def _make_unique_id() -> str:

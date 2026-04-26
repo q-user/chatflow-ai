@@ -29,9 +29,6 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    include=["infrastructure.task_queue.tasks"],
 )
 
-
-@celery_app.task(name="dummy_task")
-def dummy_task():
-    return "OK"
