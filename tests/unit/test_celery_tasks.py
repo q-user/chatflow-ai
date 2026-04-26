@@ -591,28 +591,83 @@ def test_deliver_artifact_cleanup_once():
     mock_unlink.assert_called_once_with("/tmp/test_file.csv")
 
 
-@pytest.mark.asyncio
-async def test_compile_session_value_error_no_retry():
+def test_compile_session_value_error_no_retry():
     """compile_session should propagate ValueError without manual retry."""
     from infrastructure.task_queue.tasks import compile_session
 
-    with patch(
-        "infrastructure.task_queue.tasks._get_module_handler"
-    ) as mock_get_handler:
-        mock_handler = MagicMock()
-        mock_handler.side_effect = ValueError("Invalid data")
-        mock_get_handler.return_value = mock_handler
+    mock_session = MagicMock()
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch(
+            "infrastructure.task_queue.tasks._get_module_handler",
+            side_effect=ValueError("Invalid data"),
+        ),
+    ):
+        snapshot = {
+            "company_id": str(uuid.uuid4()),
+            "user_id": str(uuid.uuid4()),
+            "bot_instance_id": str(uuid.uuid4()),
+            "module_type": "finance",
+        }
+
+        with pytest.raises(ValueError, match="Invalid data"):
+            compile_session(snapshot)
+
+
+def test_init_sync_engine_raises_on_failure():
+    """_init_sync_engine raises RuntimeError, not leaving sync_session_factory as None."""
+    import infrastructure.database.session as session_mod
+
+    original_engine = session_mod.sync_engine
+    original_factory = session_mod.sync_session_factory
+
+    try:
+        session_mod.sync_engine = None
+        session_mod.sync_session_factory = None
 
         with (
-            patch("infrastructure.task_queue.tasks.sync_session_factory"),
-            patch("infrastructure.task_queue.tasks._init_sync_engine"),
+            patch.object(session_mod.settings, "database_sync_url", ""),
+            patch.object(
+                session_mod.settings, "database_url", "postgresql+asyncpg://u:p@h/d"
+            ),
+            patch(
+                "infrastructure.database.session.create_engine",
+                side_effect=ModuleNotFoundError("No module named 'psycopg2'"),
+            ),
         ):
-            snapshot = {
-                "company_id": uuid.uuid4(),
-                "user_id": uuid.uuid4(),
-                "bot_instance_id": uuid.uuid4(),
-                "module_type": "finance",
-            }
+            with pytest.raises(
+                RuntimeError, match="Failed to initialize sync DB engine"
+            ):
+                session_mod._init_sync_engine()
 
-            with pytest.raises(ValueError, match="Invalid data"):
-                compile_session(snapshot)
+        assert session_mod.sync_session_factory is None
+        assert session_mod.sync_engine is None
+    finally:
+        session_mod.sync_engine = original_engine
+        session_mod.sync_session_factory = original_factory
+
+
+def test_compile_session_raises_when_sync_engine_fails():
+    """compile_session raises RuntimeError (not TypeError) when sync engine init fails."""
+    from infrastructure.task_queue.tasks import compile_session
+
+    with patch(
+        "infrastructure.database.session._init_sync_engine",
+        side_effect=RuntimeError(
+            "Failed to initialize sync DB engine: No module named 'psycopg2'"
+        ),
+    ):
+        snapshot = {
+            "company_id": uuid.uuid4(),
+            "user_id": uuid.uuid4(),
+            "bot_instance_id": uuid.uuid4(),
+            "module_type": "finance",
+        }
+
+        with pytest.raises(RuntimeError, match="Failed to initialize sync DB engine"):
+            compile_session(snapshot)

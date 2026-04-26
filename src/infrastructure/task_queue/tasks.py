@@ -14,7 +14,7 @@ from kombu.exceptions import OperationalError
 from datetime import datetime, timezone
 
 from infrastructure.database.models.project import ProjectTable
-from infrastructure.database.session import _init_sync_engine, sync_session_factory
+from infrastructure.database import session as db_session
 from infrastructure.messengers import create_adapter
 from infrastructure.task_queue.celery_app import celery_app
 
@@ -71,12 +71,18 @@ def compile_session(self, snapshot: dict) -> dict:
     :returns: Dict with project_id and status.
     """
     # Lazy init — only when task actually runs (not at import time)
-    _init_sync_engine()
+    db_session._init_sync_engine()
+
+    if db_session.sync_session_factory is None:
+        raise RuntimeError(
+            "sync_session_factory is not initialized. "
+            "Ensure psycopg2-binary is installed and DATABASE_SYNC_URL is set correctly."
+        )
 
     project_id = None
     try:
         # Use sync session for Celery task
-        with sync_session_factory() as session:
+        with db_session.sync_session_factory() as session:
             # 1. Create Project record
             project = ProjectTable(
                 company_id=snapshot["company_id"],
@@ -120,7 +126,7 @@ def compile_session(self, snapshot: dict) -> dict:
         # Update project to failed
         if project_id:
             try:
-                with sync_session_factory() as session:
+                with db_session.sync_session_factory() as session:
                     project = session.get(ProjectTable, uuid.UUID(project_id))
                     if project:
                         project.status = "failed"
