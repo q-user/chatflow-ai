@@ -7,6 +7,8 @@ from infrastructure.config import settings
 
 def create_ai_adapter() -> IMultiModalAI:
     """Create AI adapter from application settings."""
+    if not settings.ai_api_key:
+        raise ValueError("AI_API_KEY is not set. Configure it in .env or environment.")
     return OpenRouterAdapter(
         api_key=settings.ai_api_key,
         base_url=settings.ai_base_url,
