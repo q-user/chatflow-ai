@@ -32,10 +32,18 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://openrouter.ai/api/v1"
     ai_model_name: str = "google/gemma-4-26b-a4b-it"  # default model
 
-    # STT Provider (OpenAI-compatible API format — Groq Cloud)
+    # STT Provider selection: "groq" or "riva"
+    stt_provider: str = "groq"
+
+    # STT — Groq Cloud (OpenAI-compatible API)
     stt_api_key: str = ""
     stt_base_url: str = "https://api.groq.com/openai/v1"
     stt_model_name: str = "whisper-large-v3"
+
+    # STT — NVIDIA Riva (gRPC)
+    nvidia_api_key: str = ""
+    riva_server_url: str = "dns:///grpc.nvcf.nvidia.com:443"
+    riva_function_id: str = "b0e8b4a5-217c-40b7-9b96-17d84e666317"
 
     # Sentry
     sentry_dsn: str = ""

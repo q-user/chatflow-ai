@@ -12,7 +12,7 @@ class STTError(Exception):
 class ISpeechToText(ABC):
     """Port: interface for speech-to-text providers.
 
-    Implementations: GroqWhisperAdapter, OpenAIWhisperAdapter, YandexSpeechKitAdapter.
+    Implementations: GroqWhisperAdapter, NvidiaRivaAdapter.
     """
 
     @abstractmethod

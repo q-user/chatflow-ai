@@ -5,23 +5,26 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Настройки для стабильной работы Python и uv
 ENV UV_SYSTEM_PYTHON=1 \
-    UV_COMPILE_BYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src
+UV_COMPILE_BYTECODE=1 \
+PYTHONUNBUFFERED=1 \
+PYTHONPATH=/app/src
 
 WORKDIR /app
 
 # 2. Создаем пользователя заранее, чтобы не делать тяжелый RUN chown -R в конце
 RUN useradd -m appuser && chown appuser /app
 
-# 3. Копируем файлы зависимостей сразу с нужными правами
+# 3. Установка ffmpeg (для конвертации аудио в Riva STT)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# 4. Копируем файлы зависимостей сразу с нужными правами
 COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 
-# 4. Установка зависимостей БЕЗ кэша (критично для 5ГБ SSD)
+# 5. Установка зависимостей БЕЗ кэша (критично для 5ГБ SSD)
 # --no-cache экономит около 200-400МБ внутри образа
 RUN uv pip install --no-cache -r pyproject.toml
 
-# 5. Копируем остальной код проекта с правами пользователя
+# 6. Копируем остальной код проекта с правами пользователя
 COPY --chown=appuser:appuser . .
 
 # Переключаемся на безопасного пользователя

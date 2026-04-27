@@ -172,10 +172,11 @@ async def test_aclose_does_not_close_external_client():
 
 
 def test_create_stt_adapter():
-    """create_stt_adapter returns GroqWhisperAdapter with settings."""
+    """create_stt_adapter returns GroqWhisperAdapter when stt_provider='groq'."""
     from unittest.mock import patch
 
     with patch("infrastructure.stt.settings") as mock_settings:
+        mock_settings.stt_provider = "groq"
         mock_settings.stt_api_key = "test_key"
         mock_settings.stt_base_url = "https://api.groq.com/openai/v1"
         mock_settings.stt_model_name = "whisper-large-v3"
@@ -184,8 +185,8 @@ def test_create_stt_adapter():
 
         adapter = create_stt_adapter()
 
-    from infrastructure.stt.whisper import GroqWhisperAdapter
+        from infrastructure.stt.whisper import GroqWhisperAdapter
 
-    assert isinstance(adapter, GroqWhisperAdapter)
-    assert adapter._api_key == "test_key"
-    assert adapter._model == "whisper-large-v3"
+        assert isinstance(adapter, GroqWhisperAdapter)
+        assert adapter._api_key == "test_key"
+        assert adapter._model == "whisper-large-v3"
