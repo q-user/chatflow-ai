@@ -54,6 +54,9 @@ known-first-party = ["core", "presentation", "infrastructure"]
 python-version = "3.14"
 root = ["src"]
 
+[tool.ty.src]
+exclude = ["src/infrastructure/stt/riva_proto"]
+
 [tool.ty.rules]
 # Allow forward references in string form (standard SQLAlchemy pattern)
 unresolved-reference = "warn"

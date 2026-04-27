@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import grpc
+from grpc.aio._channel import Channel as AioChannel
 
 from core.interfaces.speech import ISpeechToText, STTError
 from infrastructure.stt.riva_proto.riva.proto import (
@@ -49,7 +50,9 @@ def _convert_to_wav(src_path: str) -> str:
     Caller is responsible for cleaning up the temp directory.
     """
     if shutil.which("ffmpeg") is None:
-        raise STTError("ffmpeg is not installed. Required for audio conversion to WAV format.")
+        raise STTError(
+            "ffmpeg is not installed. Required for audio conversion to WAV format."
+        )
 
     tmp_dir = tempfile.mkdtemp(prefix="riva_stt_")
     dst_path = str(Path(tmp_dir) / "converted.wav")
@@ -78,7 +81,9 @@ def _convert_to_wav(src_path: str) -> str:
     except subprocess.CalledProcessError as e:
         raise STTError(f"ffmpeg conversion failed: {e.stderr[:500]}") from e
     except FileNotFoundError as e:
-        raise STTError("ffmpeg is not installed. Required for audio conversion to WAV format.") from e
+        raise STTError(
+            "ffmpeg is not installed. Required for audio conversion to WAV format."
+        ) from e
 
     return dst_path
 
@@ -102,7 +107,7 @@ class NvidiaRivaAdapter(ISpeechToText):
         self._server_url = server_url
         self._function_id = function_id
         self._timeout = timeout
-        self._channel: grpc.aio.SecureChannel | None = None
+        self._channel: AioChannel | None = None
         self._stub: RivaSpeechRecognitionStub | None = None
 
     def _get_stub(self) -> RivaSpeechRecognitionStub:
