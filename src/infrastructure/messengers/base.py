@@ -7,6 +7,8 @@ from infrastructure.config import settings
 class BaseHttpAdapter:
     """Provides shared HTTP client management for messenger adapters."""
 
+    _use_proxy: bool = False
+
     def __init__(
         self, http_client: httpx.AsyncClient | None = None, timeout: float = 30.0
     ):
@@ -18,7 +20,7 @@ class BaseHttpAdapter:
         """Lazy httpx client creation with proxy support."""
         if self._http is None:
             kwargs: dict = {"timeout": self._timeout}
-            if settings.http_proxy:
+            if self._use_proxy and settings.http_proxy:
                 kwargs["proxy"] = settings.http_proxy
             self._http = httpx.AsyncClient(**kwargs)
         return self._http

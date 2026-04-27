@@ -16,8 +16,10 @@ class TelegramAdapter(BaseHttpAdapter, IMessengerAdapter):
 
     Implements the IMessengerAdapter port for Telegram messenger.
     Each instance is bound to a specific bot token.
+    Uses HTTP_PROXY for outbound requests (Telegram blocked in RU).
     """
 
+    _use_proxy = True
     BASE_URL = "https://api.telegram.org/bot{token}"
     FILE_URL = "https://api.telegram.org/file/bot{token}/{file_path}"
 
@@ -205,7 +207,9 @@ class TelegramAdapter(BaseHttpAdapter, IMessengerAdapter):
         except httpx.RequestError as e:
             raise ValueError(f"Network error answering callback: {e}") from e
 
-    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
+    async def register_webhook(
+        self, webhook_url: str, secret: str | None = None
+    ) -> None:
         """Register a webhook URL with Telegram via /setWebhook.
 
         :param webhook_url: Full public URL for the webhook endpoint.

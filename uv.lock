@@ -286,6 +286,7 @@ dependencies = [
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
     { name = "pymupdf4llm" },
+    { name = "pysocks" },
     { name = "python-docx" },
     { name = "redis" },
     { name = "sentry-sdk", extra = ["celery", "fastapi", "httpx"] },
@@ -321,6 +322,7 @@ requires-dist = [
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "pymupdf4llm", specifier = ">=0.0.17" },
+    { name = "pysocks", specifier = ">=1.7.1" },
     { name = "python-docx", specifier = ">=1.1.0" },
     { name = "redis", specifier = ">=7.4.0" },
     { name = "sentry-sdk", extras = ["celery", "fastapi", "httpx"], specifier = ">=2.58.0" },
@@ -1238,6 +1240,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f0/e7/8b97bf223ea2fd72efd862af3210ae3aa2fb15b39b55767de9e0a2fd0985/pymupdf4llm-1.27.2.2.tar.gz", hash = "sha256:f95e113d434958f8c63393c836fe965ad398d1fc07e7807c0a627c9ec1946e9f", size = 72877, upload-time = "2026-03-20T09:48:01.485Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/fc/a4977b84f9a7e70aac4c9beed55d4693b985cef89fab7d49c896335bf158/pymupdf4llm-1.27.2.2-py3-none-any.whl", hash = "sha256:ec3bbceed21c6f86289155f29c557aa54ae1c8282c4a45d6de984f16fb4c90cb", size = 84294, upload-time = "2026-03-20T09:45:55.365Z" },
+]
+
+[[package]]
+name = "pysocks"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429, upload-time = "2019-09-20T02:07:35.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725, upload-time = "2019-09-20T02:06:22.938Z" },
 ]
 
 [[package]]
