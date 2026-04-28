@@ -28,9 +28,10 @@ class Settings(BaseSettings):
     http_proxy: str | None = None
 
     # AI Provider (OpenAI-compatible API format)
-    ai_api_key: str = ""  # OpenRouter / Google AI Studio key
+    ai_api_key: str = ""  # OpenRouter / NVIDIA / Google AI Studio key
     ai_base_url: str = "https://openrouter.ai/api/v1"
     ai_model_name: str = "google/gemma-4-26b-a4b-it"  # default model
+    ai_timeout: float = 600.0  # NVIDIA free tier can take up to 10 min
 
     # STT Provider selection: "groq" or "riva"
     stt_provider: str = "groq"

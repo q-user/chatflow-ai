@@ -13,6 +13,7 @@ def create_ai_adapter() -> IMultiModalAI:
         api_key=settings.ai_api_key,
         base_url=settings.ai_base_url,
         model=settings.ai_model_name,
+        timeout=settings.ai_timeout,
     )
 
 

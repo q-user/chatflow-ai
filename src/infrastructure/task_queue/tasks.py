@@ -13,6 +13,7 @@ import httpx
 from kombu.exceptions import OperationalError
 from datetime import datetime, timezone
 
+import sentry_sdk
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.database import session as db_session
 from infrastructure.messengers import create_adapter
@@ -48,6 +49,8 @@ FILE_CATEGORY_PREFIXES = {
     retry_backoff_max=300,
     retry_jitter=True,
     max_retries=3,
+    soft_time_limit=900,
+    time_limit=960,
 )
 def compile_session(self, snapshot: dict) -> dict:
     """Process accumulated session data.
@@ -135,6 +138,7 @@ def compile_session(self, snapshot: dict) -> dict:
             except Exception:
                 logger.exception("Failed to update project status for %s", project_id)
 
+        sentry_sdk.capture_exception(exc)
         logger.exception("compile_session failed for project %s", project_id)
         raise
 
@@ -280,7 +284,9 @@ async def _download_and_parse_media(
             try:
                 local_path = await adapter.download_file(file_id, dest)
             except Exception:
-                logger.warning("Failed to download file %s, skipping", file_id, exc_info=True)
+                logger.warning(
+                    "Failed to download file %s, skipping", file_id, exc_info=True
+                )
                 continue
 
             # Route by category
