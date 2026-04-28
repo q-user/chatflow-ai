@@ -279,10 +279,23 @@ async def _download_and_parse_media(
                 "/tmp",
                 f"{FILE_CATEGORY_PREFIXES[category]}_{uuid.uuid4().hex[:8]}{ext}",
             )
+            logger.info(
+                "Processing file: id=%s, mime=%s, category=%s, dest=%s",
+                file_id,
+                file_type,
+                category,
+                dest,
+            )
 
             # Download
             try:
                 local_path = await adapter.download_file(file_id, dest)
+                file_size = (
+                    os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                )
+                logger.info(
+                    "Downloaded file: path=%s, size=%d bytes", local_path, file_size
+                )
             except Exception:
                 logger.warning(
                     "Failed to download file %s, skipping", file_id, exc_info=True
@@ -293,14 +306,23 @@ async def _download_and_parse_media(
             try:
                 if category == "image":
                     image_paths.append(local_path)
+                    logger.info("Added image: %s", local_path)
                 elif category == "audio":
                     if stt is None:
-                        # lazy STT init
                         from infrastructure.stt import create_stt_adapter
 
                         stt = create_stt_adapter()
+                        logger.info(
+                            "Initialized STT adapter: provider=%s",
+                            create_stt_adapter.__module__,
+                        )
                     try:
                         text = await stt.transcribe(local_path)
+                        logger.info(
+                            "STT result: length=%d, text=%.200s",
+                            len(text) if text else 0,
+                            text or "",
+                        )
                         if text:
                             parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
                     finally:
@@ -319,7 +341,11 @@ async def _download_and_parse_media(
                     logger.warning("Unknown file category for %s, skipping", file_id)
             except Exception as exc:
                 logger.warning(
-                    "Failed to parse file %s (%s): %s", file_id, category, exc
+                    "Failed to parse file %s (%s): %s",
+                    file_id,
+                    category,
+                    exc,
+                    exc_info=True,
                 )
 
     finally:

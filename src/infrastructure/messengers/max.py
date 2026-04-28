@@ -106,7 +106,9 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
         chat = callback.get("chat", {})
 
         messenger_user_id = str(user.get("user_id", ""))
-        chat_id = str(chat.get("chat_id", "")) if chat.get("chat_id") else messenger_user_id
+        chat_id = (
+            str(chat.get("chat_id", "")) if chat.get("chat_id") else messenger_user_id
+        )
         callback_id = str(callback.get("callback_id", ""))
         callback_payload = str(callback.get("payload", ""))
 
@@ -131,38 +133,17 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
         if not messenger_user_id:
             raise ValueError("No sender.user_id in MAX message")
 
-        # Chat ID: use recipient.chat_id for groups, user_id for DMs
-        chat_id = str(recipient.get("chat_id", "")) if recipient.get("chat_id") else messenger_user_id
+        chat_id = (
+            str(recipient.get("chat_id", ""))
+            if recipient.get("chat_id")
+            else messenger_user_id
+        )
 
-        # Text
         text = body.get("text")
 
-        # File info — extract from attachments
-        file_id: str | None = None
-        file_type: str | None = None
-        file_name: str | None = None
-
-        attachments = body.get("attachments") or []
-        for att in attachments:
-            att_type = att.get("type", "")
-            att_payload = att.get("payload", {})
-
-            # Image / file attachments contain URL for download
-            if att_type in ("image", "file", "video", "audio"):
-                file_url = att_payload.get("url")
-                if file_url:
-                    file_id = file_url  # MAX sends direct URL — use as file_id
-                    file_name = att_payload.get("filename") or att_payload.get("name")
-                    if att_type == "image":
-                        file_type = "image/jpeg"
-                    elif att_type == "video":
-                        file_type = "video/mp4"
-                    elif att_type == "audio":
-                        file_type = "audio/mpeg"
-                    else:
-                        file_name = file_name or "document"
-                        file_type = att_payload.get("mime_type", "application/octet-stream")
-                    break  # take first file attachment
+        file_id, file_type, file_name = self._extract_file_attachment(
+            body.get("attachments") or []
+        )
 
         return IncomingEnvelope(
             messenger_user_id=messenger_user_id,
@@ -171,9 +152,34 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
             file_id=file_id,
             file_type=file_type,
             file_name=file_name,
-            bot_instance_id=uuid.uuid4(),  # placeholder — set by router
+            bot_instance_id=uuid.uuid4(),
             messenger_type="MX",
         )
+
+    @staticmethod
+    def _extract_file_attachment(
+        attachments: list[dict],
+    ) -> tuple[str | None, str | None, str | None]:
+        """Extract first file attachment from MAX attachments list."""
+        for att in attachments:
+            att_type = att.get("type", "")
+            att_payload = att.get("payload", {})
+            if att_type not in ("image", "file", "video", "audio", "voice"):
+                continue
+            file_url = att_payload.get("url")
+            if not file_url:
+                continue
+            file_name = att_payload.get("filename") or att_payload.get("name")
+            if att_type == "image":
+                return file_url, "image/jpeg", file_name
+            if att_type == "video":
+                return file_url, "video/mp4", file_name
+            if att_type in ("audio", "voice"):
+                mime = att_payload.get("mime_type") or "audio/ogg"
+                return file_url, mime, file_name
+            mime = att_payload.get("mime_type", "application/octet-stream")
+            return file_url, mime, file_name or "document"
+        return None, None, None
 
     async def send_text(
         self,
@@ -283,9 +289,7 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
                 if resp.status_code == 400:
                     err = resp.json()
                     if err.get("code") == "attachment.not.ready":
-                        logger.warning(
-                            "File not ready yet, retry %d/3", attempt + 1
-                        )
+                        logger.warning("File not ready yet, retry %d/3", attempt + 1)
                         await asyncio.sleep(1.0 * (attempt + 1))
                         continue
                 resp.raise_for_status()
@@ -319,7 +323,9 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
         except httpx.RequestError as e:
             raise ValueError(f"Network error downloading file: {e}") from e
 
-    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
+    async def register_webhook(
+        self, webhook_url: str, secret: str | None = None
+    ) -> None:
         """Register a webhook via POST /subscriptions.
 
         :param webhook_url: Full public HTTPS URL for the webhook endpoint.
@@ -349,8 +355,7 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
         result = resp.json()
         if not result.get("success"):
             raise ValueError(
-                f"MAX webhook registration failed: "
-                f"{result.get('message', 'unknown')}"
+                f"MAX webhook registration failed: {result.get('message', 'unknown')}"
             )
 
     async def answer_callback(self, callback_id: str) -> None:
@@ -397,11 +402,13 @@ def _build_inline_keyboard(
         max_row = []
         for btn in row:
             payload = btn.get("payload", btn["text"])
-            max_row.append({
-                "type": "callback",
-                "text": btn["text"],
-                "payload": payload,
-            })
+            max_row.append(
+                {
+                    "type": "callback",
+                    "text": btn["text"],
+                    "payload": payload,
+                }
+            )
         rows.append(max_row)
 
     return {
