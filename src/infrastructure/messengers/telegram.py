@@ -16,7 +16,7 @@ class TelegramAdapter(BaseHttpAdapter, IMessengerAdapter):
 
     Implements the IMessengerAdapter port for Telegram messenger.
     Each instance is bound to a specific bot token.
-    Uses HTTP_PROXY for outbound requests (Telegram blocked in RU).
+    Uses TELEGRAM_PROXY for outbound requests (Telegram blocked in RU).
     """
 
     _use_proxy = True

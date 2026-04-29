@@ -14,7 +14,7 @@ class MockAdapter(BaseHttpAdapter):
     async def test_base_http_adapter_no_proxy():
         """Verify that without a proxy, httpx.AsyncClient is created without proxy arg."""
         with patch("infrastructure.messengers.base.settings") as mock_settings:
-            mock_settings.http_proxy = None
+            mock_settings.telegram_proxy = None
 
             with patch("httpx.AsyncClient") as mock_client_cls:
                 adapter = MockAdapter()
@@ -30,7 +30,7 @@ class MockAdapter(BaseHttpAdapter):
         """Verify that with a proxy, httpx.AsyncClient is created with proxy arg."""
         proxy_url = "http://proxy.example.com:8080"
         with patch("infrastructure.messengers.base.settings") as mock_settings:
-            mock_settings.http_proxy = proxy_url
+            mock_settings.telegram_proxy = proxy_url
 
             with patch("httpx.AsyncClient") as mock_client_cls:
                 adapter = MockAdapter()

@@ -20,9 +20,10 @@ class BaseHttpAdapter:
         """Lazy httpx client creation with proxy support."""
         if self._http is None:
             kwargs: dict = {"timeout": self._timeout}
-            if self._use_proxy and settings.http_proxy:
-                kwargs["proxy"] = settings.http_proxy
+        if self._use_proxy and settings.telegram_proxy:
+            kwargs["proxy"] = settings.telegram_proxy
             self._http = httpx.AsyncClient(**kwargs)
+        assert self._http is not None
         return self._http
 
     async def aclose(self) -> None:

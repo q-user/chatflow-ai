@@ -114,6 +114,7 @@ async def test_transcribe_wav_success(adapter: NvidiaRivaAdapter, valid_wav_file
     assert request.config.encoding == 1  # LINEAR_PCM
     assert request.config.sample_rate_hertz == 16000
     assert request.config.enable_automatic_punctuation is True
+    assert request.config.max_alternatives == 1
 
     metadata = call_kwargs[1]["metadata"]
     metadata_dict = dict(metadata)
@@ -152,7 +153,9 @@ async def test_transcribe_empty_result(adapter: NvidiaRivaAdapter, valid_wav_fil
 
 
 @pytest.mark.asyncio
-async def test_transcribe_no_alternatives(adapter: NvidiaRivaAdapter, valid_wav_file: str):
+async def test_transcribe_no_alternatives(
+    adapter: NvidiaRivaAdapter, valid_wav_file: str
+):
     """Result with no alternatives -> returns empty string."""
     result_mock = MagicMock()
     result_mock.alternatives = []
@@ -167,7 +170,9 @@ async def test_transcribe_no_alternatives(adapter: NvidiaRivaAdapter, valid_wav_
 
 
 @pytest.mark.asyncio
-async def test_transcribe_language_mapping(adapter: NvidiaRivaAdapter, valid_wav_file: str):
+async def test_transcribe_language_mapping(
+    adapter: NvidiaRivaAdapter, valid_wav_file: str
+):
     """ISO 639-1 language code is mapped to BCP-47."""
     mock_response = _make_recognize_response("Hello world")
     mock_stub = MagicMock()
@@ -194,8 +199,10 @@ async def test_transcribe_ogg_converts_to_wav(
     mock_stub.Recognize = AsyncMock(return_value=mock_response)
     adapter._stub = mock_stub
 
-    with patch("infrastructure.stt.riva._convert_to_wav") as mock_convert, \
-         patch("builtins.open", MagicMock(return_value=MagicMock())) as mock_open:
+    with (
+        patch("infrastructure.stt.riva._convert_to_wav") as mock_convert,
+        patch("builtins.open", MagicMock(return_value=MagicMock())) as mock_open,
+    ):
         mock_convert.return_value = "/tmp/riva_stt_xxx/converted.wav"
         mock_file = MagicMock()
         mock_file.read.return_value = b"RIFF fake wav data"
@@ -219,9 +226,13 @@ def test_convert_to_wav_ffmpeg_not_found():
 
 def test_convert_to_wav_ffmpeg_failure():
     """ffmpeg conversion failure -> STTError."""
-    with patch("infrastructure.stt.riva.shutil.which", return_value="/usr/bin/ffmpeg"), \
-         patch("infrastructure.stt.riva.subprocess.run") as mock_run, \
-         patch("infrastructure.stt.riva.tempfile.mkdtemp", return_value="/tmp/riva_test"):
+    with (
+        patch("infrastructure.stt.riva.shutil.which", return_value="/usr/bin/ffmpeg"),
+        patch("infrastructure.stt.riva.subprocess.run") as mock_run,
+        patch(
+            "infrastructure.stt.riva.tempfile.mkdtemp", return_value="/tmp/riva_test"
+        ),
+    ):
         mock_run.side_effect = __import__("subprocess").CalledProcessError(
             1, "ffmpeg", stderr="Invalid data found"
         )
@@ -268,8 +279,10 @@ def test_get_stub_creates_channel():
         api_key="key",
         server_url="dns:///grpc.test.nvidia.com:443",
     )
-    with patch("infrastructure.stt.riva.grpc.aio.secure_channel") as mock_channel, \
-         patch("infrastructure.stt.riva.RivaSpeechRecognitionStub") as mock_stub_cls:
+    with (
+        patch("infrastructure.stt.riva.grpc.aio.secure_channel") as mock_channel,
+        patch("infrastructure.stt.riva.RivaSpeechRecognitionStub") as mock_stub_cls,
+    ):
         mock_channel.return_value = MagicMock()
         mock_stub_cls.return_value = MagicMock()
 

@@ -137,6 +137,7 @@ class NvidiaRivaAdapter(ISpeechToText):
             raise STTError(f"Audio file too large: {size} bytes (max {MAX_AUDIO_SIZE})")
 
         wav_path: str | None = None
+        result = ""
         try:
             if path.suffix.lower() in EXTENSIONS_NEEDING_CONVERT:
                 wav_path = _convert_to_wav(str(path))
@@ -155,6 +156,7 @@ class NvidiaRivaAdapter(ISpeechToText):
                     sample_rate_hertz=16000,
                     language_code=language_code,
                     enable_automatic_punctuation=True,
+                    max_alternatives=1,
                 ),
                 audio=audio_bytes,
             )
@@ -164,29 +166,37 @@ class NvidiaRivaAdapter(ISpeechToText):
                 ("authorization", f"Bearer {self._api_key}"),
             ]
 
-            stub = self._get_stub()
-            try:
-                response = await stub.Recognize(
-                    request,
-                    metadata=metadata,
-                    timeout=self._timeout,
-                )
-            except grpc.aio.AioRpcError as e:
-                raise STTError(f"Riva gRPC error ({e.code()}): {e.details()}") from e
-
-            if not response.results:
-                return ""
-
-            alternatives = response.results[0].alternatives
-            if not alternatives:
-                return ""
-
-            return alternatives[0].transcript.strip()
+            result = await self._recognize(request, metadata)
 
         finally:
             if wav_path is not None:
                 tmp_dir = str(Path(wav_path).parent)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        return result
+
+    async def _recognize(
+        self, request: RecognizeRequest, metadata: list[tuple[str, str]]
+    ) -> str:
+        """Execute gRPC Recognize call and extract transcript."""
+        stub = self._get_stub()
+        try:
+            response = await stub.Recognize(
+                request,
+                metadata=metadata,
+                timeout=self._timeout,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise STTError(f"Riva gRPC error ({e.code()}): {e.details()}") from e
+
+        if not response.results:
+            return ""
+
+        alternatives = response.results[0].alternatives
+        if not alternatives:
+            return ""
+
+        return alternatives[0].transcript.strip()
 
     async def aclose(self) -> None:
         """Close the gRPC channel if we created it."""
