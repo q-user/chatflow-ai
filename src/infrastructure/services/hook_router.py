@@ -37,6 +37,7 @@ async def get_adapter_factory() -> AdapterFactory:
     """FastAPI dependency: provides the adapter factory."""
     return create_adapter
 
+
 logger = logging.getLogger(__name__)
 
 UNLINKED_PROMPT = (
@@ -265,6 +266,14 @@ class HookRouterService:
             await self._session_service.accumulate(user.id, envelope)
             count = await self._redis.llen(  # ty: ignore[invalid-await]
                 f"session:{user.id}:payload"
+            )
+            logger.info(
+                "Accumulated item for user %s: text=%r file_id=%r file_type=%r (total=%s)",
+                user.id,
+                envelope.text,
+                envelope.file_id,
+                envelope.file_type,
+                count,
             )
             await self._safe_send(
                 adapter,

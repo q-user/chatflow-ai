@@ -177,9 +177,16 @@ def _finance_module_handler(
     :raises ValueError: If no text data or AI returned no rows.
     :raises AIServiceError: If AI call fails.
     """
-    # 1. Concatenate text from items (may be empty if only media)
     text_chunks = [item.get("text", "") for item in items if item.get("text")]
     combined_text = "\n---\n".join(text_chunks)
+
+    logger.info(
+        "Finance handler: %d items, %d text_chunks, %d file_items. Items: %s",
+        len(items),
+        len(text_chunks),
+        sum(1 for i in items if i.get("file_id") and i.get("file_type")),
+        items,
+    )
 
     # 2. System prompt: from config or fallback
     system_prompt = (module_config or {}).get(
