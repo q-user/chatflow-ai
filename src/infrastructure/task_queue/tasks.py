@@ -188,10 +188,14 @@ def _finance_module_handler(
         items,
     )
 
-    # 2. System prompt: from config or fallback
+    # 2. System prompt: from config or fallback (with today's date injected)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     system_prompt = (module_config or {}).get(
         "system_prompt"
     ) or FINANCE_FALLBACK_PROMPT
+    system_prompt += (
+        f"\nToday's date: {today}. If the user does not specify a date, use today."
+    )
 
     # 3. Filter ALL file items (not just images)
     file_items = [
