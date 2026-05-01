@@ -2,8 +2,10 @@
 
 import uuid
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
 from fakeredis import FakeAsyncRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,38 +20,11 @@ from infrastructure.services.hook_router import HookRouterService
 from infrastructure.services.messenger_link import MessengerLinkService
 
 
-# ──────────────────────────────────────────────
-# Fixtures
-# ──────────────────────────────────────────────
-
-
-@pytest.fixture
-def fake_redis() -> FakeAsyncRedis:
-    return FakeAsyncRedis(decode_responses=False)
-
-
-@pytest.fixture
-def otp_service(fake_redis: FakeAsyncRedis) -> OTPService:
-    return OTPService(fake_redis)
-
-
-@pytest.fixture
-def session_service(fake_redis: FakeAsyncRedis) -> SessionService:
-    return SessionService(fake_redis)
-
-
-@pytest.fixture
-def messenger_link_service(
-    otp_service: OTPService, db_session: AsyncSession
-) -> MessengerLinkService:
-    return MessengerLinkService(otp_service, db_session)
-
-
 @pytest.fixture
 def hook_router(
     db_session: AsyncSession,
     fake_redis: FakeAsyncRedis,
-    otp_service: OTPService,
+    otp_service,
     session_service: SessionService,
     messenger_link_service: MessengerLinkService,
     mock_adapter,
@@ -71,6 +46,37 @@ def hook_router(
     yield service
 
 
+@pytest_asyncio.fixture
+async def session_service(fake_redis: FakeAsyncRedis) -> SessionService:
+    """Provide SessionService with fake Redis."""
+    return SessionService(fake_redis)
+
+
+@pytest_asyncio.fixture
+async def messenger_link_service(
+    otp_service: OTPService, db_session: AsyncSession
+) -> MessengerLinkService:
+    """Provide MessengerLinkService with fake OTP and DB session."""
+    return MessengerLinkService(otp_service, db_session)
+
+
+@pytest_asyncio.fixture
+async def finance_bot_instance(
+    db_session: AsyncSession, test_company: CompanyTable
+) -> BotInstanceTable:
+    """Create a test bot instance with module_type=finance."""
+    bot = BotInstanceTable(
+        company_id=test_company.id,
+        messenger_type="TG",
+        token="finance_bot_token_123",
+        module_type="finance",
+        status="active",
+    )
+    db_session.add(bot)
+    await db_session.flush()
+    return bot
+
+
 def _make_unique_id() -> str:
     """Generate a unique suffix for test data to avoid conflicts across runs."""
     return uuid.uuid4().hex[:8]
@@ -84,6 +90,17 @@ def _make_user(email_prefix: str, company_id, telegram_id: str) -> UserTable:
         company_id=company_id,
         telegram_id=telegram_id,
     )
+
+
+def _tg_text_payload(telegram_id: str, text: str) -> dict:
+    """Build a Telegram message payload."""
+    return {
+        "message": {
+            "chat": {"id": telegram_id},
+            "from": {"id": telegram_id},
+            "text": text,
+        }
+    }
 
 
 # ──────────────────────────────────────────────
@@ -149,7 +166,7 @@ async def test_process_webhook_invalid_payload(
     status_code, message = await hook_router.process_webhook(
         "TG",
         uuid.UUID(str(test_bot_instance.id)),
-        {"update_id": 123},  # no message key
+        {"update_id": 123},
     )
     assert status_code == 400
     assert "invalid" in message.lower()
@@ -180,7 +197,6 @@ async def test_process_webhook_unknown_user_non_otp(
     )
     assert status_code == 200
 
-    # verify send_text was called with UNLINKED_PROMPT
     mock_adapter.send_text.assert_called_once()
     call_args = mock_adapter.send_text.call_args
     assert (
@@ -194,10 +210,8 @@ async def test_process_webhook_unknown_user_invalid_otp(
     hook_router: HookRouterService,
     test_bot_instance: BotInstanceTable,
     mock_adapter,
-    fake_redis: FakeAsyncRedis,
 ):
     """Unknown user, invalid OTP code → sends OTP_FAILURE."""
-    # No OTP generated for this code
     payload = {
         "message": {
             "chat": {"id": 999888777},
@@ -224,12 +238,11 @@ async def test_process_webhook_unknown_user_valid_otp(
     test_bot_instance: BotInstanceTable,
     mock_adapter,
     fake_redis: FakeAsyncRedis,
-    otp_service: OTPService,
+    otp_service,
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
     """Unknown user, valid OTP code → links messenger, sends OTP_SUCCESS."""
-    # 1. Create user in DB
     user = UserTable(
         email=f"otp_user_{_make_unique_id()}@example.com",
         hashed_password="pass",
@@ -238,10 +251,8 @@ async def test_process_webhook_unknown_user_valid_otp(
     db_session.add(user)
     await db_session.flush()
 
-    # 2. Generate OTP for this user
     code = await otp_service.generate_code(user.id)
 
-    # 3. Send OTP code as message from unknown messenger_user_id
     messenger_id = f"777666555_{_make_unique_id()}"
     payload = {
         "message": {
@@ -256,18 +267,16 @@ async def test_process_webhook_unknown_user_valid_otp(
     )
     assert status_code == 200
 
-    # 4. Verify messenger was linked
     await db_session.refresh(user)
     assert user.telegram_id == messenger_id
 
-    # 5. Verify success message was sent
     mock_adapter.send_text.assert_called_once()
     call_args = mock_adapter.send_text.call_args
     assert "привязан" in call_args[0][1].lower()
 
 
 # ──────────────────────────────────────────────
-# Known user — command tests
+# Estimator (Batch) — command tests
 # ──────────────────────────────────────────────
 
 
@@ -279,19 +288,13 @@ async def test_process_webhook_known_user_command_new(
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Known user, /new command → starts session."""
+    """Known user, /new command → starts session (estimator mode)."""
     telegram_id = f"111222333_{_make_unique_id()}"
     user = _make_user("new_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "/new",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "/new")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -312,13 +315,12 @@ async def test_process_webhook_known_user_command_compile(
     test_company: CompanyTable,
     session_service: SessionService,
 ):
-    """Known user, /compile with active session → compiles and sends result."""
+    """Known user, /compile with active session → compiles and sends result (estimator)."""
     telegram_id = f"444555666_{_make_unique_id()}"
     user = _make_user("compile_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    # Start a session first
     await session_service.handle_new(user.id)
     await session_service.accumulate(
         user.id,
@@ -331,13 +333,7 @@ async def test_process_webhook_known_user_command_compile(
         ),
     )
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "/compile",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "/compile")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -357,19 +353,13 @@ async def test_process_webhook_known_user_command_compile_no_session(
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Known user, /compile without session → sends error."""
+    """Known user, /compile without session → sends error (estimator)."""
     telegram_id = f"777888999_{_make_unique_id()}"
     user = _make_user("no_session_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "/compile",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "/compile")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -389,19 +379,13 @@ async def test_process_webhook_known_user_unknown_command(
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Known user, unknown command → sends 'unknown command'."""
+    """Known user, unknown command → sends 'unknown command' (estimator)."""
     telegram_id = f"123123123_{_make_unique_id()}"
     user = _make_user("unknown_cmd_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "/unknown",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "/unknown")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -414,7 +398,7 @@ async def test_process_webhook_known_user_unknown_command(
 
 
 # ──────────────────────────────────────────────
-# Known user — text message tests
+# Estimator (Batch) — text message tests
 # ──────────────────────────────────────────────
 
 
@@ -427,22 +411,15 @@ async def test_process_webhook_known_user_text_collecting(
     test_company: CompanyTable,
     session_service: SessionService,
 ):
-    """Known user, text while collecting → accumulates."""
+    """Known user, text while collecting → accumulates (estimator)."""
     telegram_id = f"321321321_{_make_unique_id()}"
     user = _make_user("collecting_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    # Start session
     await session_service.handle_new(user.id)
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "some data to collect",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "some data to collect")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -462,19 +439,13 @@ async def test_process_webhook_known_user_text_idle(
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Known user, text while idle → sends 'send /new'."""
+    """Known user, text while idle → sends 'send /new' (estimator)."""
     telegram_id = f"654654654_{_make_unique_id()}"
     user = _make_user("idle_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = {
-        "message": {
-            "chat": {"id": telegram_id},
-            "from": {"id": telegram_id},
-            "text": "hello",
-        }
-    }
+    payload = _tg_text_payload(telegram_id, "hello")
 
     status_code, message = await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
@@ -486,6 +457,11 @@ async def test_process_webhook_known_user_text_idle(
     assert "/new" in call_args[0][1]
 
 
+# ──────────────────────────────────────────────
+# Adapter lifecycle test
+# ──────────────────────────────────────────────
+
+
 @pytest.mark.asyncio
 async def test_process_webhook_adapter_closed(
     hook_router: HookRouterService,
@@ -493,23 +469,248 @@ async def test_process_webhook_adapter_closed(
     mock_adapter,
 ):
     """Adapter must be closed regardless of outcome."""
-    # Case 1: Success
-    payload = {
-        "message": {
-            "chat": {"id": 123},
-            "from": {"id": 456},
-            "text": "hello",
-        }
-    }
+    payload = _tg_text_payload("123", "hello")
     await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert mock_adapter.aclose.call_count == 1
 
-    # Case 2: Invalid payload (failure)
     mock_adapter.aclose.reset_mock()
     mock_adapter.parse_webhook.side_effect = ValueError("Invalid")
     await hook_router.process_webhook(
         "TG", uuid.UUID(str(test_bot_instance.id)), payload
     )
     assert mock_adapter.aclose.call_count == 1
+
+
+# ──────────────────────────────────────────────
+# Finance (Stream) — dispatch tests
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_finance_text_enqueues_process_stream_item(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: text message → enqueues process_stream_item."""
+    telegram_id = f"fin_text_{_make_unique_id()}"
+    user = _make_user("fin_text_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "Обед 350р")
+
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    mock_celery.send_task.assert_called_once()
+    call_kwargs = mock_celery.send_task.call_args
+    assert call_kwargs[0][0] == "process_stream_item"
+    snapshot = call_kwargs[1]["kwargs"]["snapshot"]
+    assert len(snapshot["items"]) == 1
+    assert snapshot["items"][0]["text"] == "Обед 350р"
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    assert "анализирую" in call_args[0][1].lower()
+
+
+@pytest.mark.asyncio
+async def test_finance_file_enqueues_process_stream_item(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: file message → enqueues process_stream_item with file metadata."""
+    telegram_id = f"fin_file_{_make_unique_id()}"
+    user = _make_user("fin_file_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = {
+        "message": {
+            "chat": {"id": telegram_id},
+            "from": {"id": telegram_id},
+            "text": "Чек из магазина",
+            "document": {"file_id": "file123", "mime_type": "image/jpeg"},
+        }
+    }
+
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    mock_celery.send_task.assert_called_once()
+    snapshot = mock_celery.send_task.call_args[1]["kwargs"]["snapshot"]
+    assert snapshot["items"][0]["text"] == "Чек из магазина"
+    assert snapshot["items"][0]["file_id"] == "file123"
+    assert snapshot["items"][0]["file_type"] == "image/jpeg"
+
+
+@pytest.mark.asyncio
+async def test_finance_report_enqueues_generate_report(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /report → enqueues generate_report."""
+    telegram_id = f"fin_report_{_make_unique_id()}"
+    user = _make_user("fin_report_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "/report")
+
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    mock_celery.send_task.assert_called_once()
+    call_kwargs = mock_celery.send_task.call_args
+    assert call_kwargs[0][0] == "generate_report"
+    kw = call_kwargs[1]["kwargs"]
+    assert kw["user_id"] == str(user.id)
+    assert kw["chat_id"] == telegram_id
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    assert "отчёт" in call_args[0][1].lower() or "формиров" in call_args[0][1].lower()
+
+
+@pytest.mark.asyncio
+async def test_finance_new_command_returns_polite_error(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /new → polite error explaining finance mode."""
+    telegram_id = f"fin_new_{_make_unique_id()}"
+    user = _make_user("fin_new_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "/new")
+
+    status_code, _ = await hook_router.process_webhook(
+        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+    )
+    assert status_code == 200
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    msg = call_args[0][1].lower()
+    assert "не используются" in msg or "/report" in msg
+
+
+@pytest.mark.asyncio
+async def test_finance_compile_command_returns_polite_error(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /compile → polite error explaining finance mode."""
+    telegram_id = f"fin_compile_{_make_unique_id()}"
+    user = _make_user("fin_compile_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "/compile")
+
+    status_code, _ = await hook_router.process_webhook(
+        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+    )
+    assert status_code == 200
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    msg = call_args[0][1].lower()
+    assert "не используются" in msg or "/report" in msg
+
+
+@pytest.mark.asyncio
+async def test_finance_unknown_command_returns_polite_error(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /unknown → same polite error as /new, /compile."""
+    telegram_id = f"fin_unk_{_make_unique_id()}"
+    user = _make_user("fin_unk_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "/start")
+
+    status_code, _ = await hook_router.process_webhook(
+        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+    )
+    assert status_code == 200
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    msg = call_args[0][1].lower()
+    assert "не используются" in msg or "/report" in msg
+
+
+# ──────────────────────────────────────────────
+# Module-type routing test
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_unknown_module_type_returns_error(
+    hook_router: HookRouterService,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+    mock_adapter,
+):
+    """Unknown module_type → sends error to user."""
+    bot = BotInstanceTable(
+        company_id=test_company.id,
+        messenger_type="TG",
+        token="unknown_module_bot",
+        module_type="nonexistent",
+        status="active",
+    )
+    db_session.add(bot)
+    await db_session.flush()
+
+    telegram_id = f"unk_mod_{_make_unique_id()}"
+    user = _make_user("unk_mod_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "hello")
+
+    status_code, _ = await hook_router.process_webhook(
+        "TG", uuid.UUID(str(bot.id)), payload
+    )
+    assert status_code == 200
+
+    mock_adapter.send_text.assert_called_once()
+    call_args = mock_adapter.send_text.call_args
+    assert (
+        "неизвест" in call_args[0][1].lower()
+        or "администратор" in call_args[0][1].lower()
+    )

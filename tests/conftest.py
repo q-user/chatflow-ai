@@ -172,6 +172,7 @@ async def client(
     app.dependency_overrides[get_otp_service] = override_get_otp_service
 
     from infrastructure.services.hook_router import get_adapter_factory
+
     app.dependency_overrides[get_adapter_factory] = lambda: mock_adapter_factory
 
     async with AsyncClient(
@@ -277,7 +278,7 @@ async def test_bot_instance(
         company_id=test_company.id,
         messenger_type="TG",
         token="test_bot_token_123",
-        module_type="finance",
+        module_type="estimator",
         status="active",
     )
     db_session.add(bot)
@@ -393,14 +394,18 @@ async def hooks_client(
         get_session_service as hooks_get_session_service,
         get_messenger_link_service as hooks_get_messenger_link_service,
     )
+
     app.dependency_overrides[hooks_get_session_service] = override_get_session_service
-    app.dependency_overrides[hooks_get_messenger_link_service] = override_get_messenger_link_service
+    app.dependency_overrides[hooks_get_messenger_link_service] = (
+        override_get_messenger_link_service
+    )
 
     # Adapter factory (single source of truth in hook_router)
     def mock_adapter_factory(messenger_type: str, bot_token: str) -> IMessengerAdapter:
         return mock_adapter
 
     from infrastructure.services.hook_router import get_adapter_factory
+
     app.dependency_overrides[get_adapter_factory] = lambda: mock_adapter_factory
 
     async with AsyncClient(

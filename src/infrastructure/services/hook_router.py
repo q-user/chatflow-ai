@@ -19,7 +19,7 @@ from core.domain.incoming import IncomingEnvelope
 from core.domain.messenger import MESSENGER_TYPE_TO_FIELD
 from core.interfaces.messenger import IMessengerAdapter
 from core.services.otp import OTPService
-from core.services.session import SessionService
+from core.services.session import SessionService, SessionSnapshot
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.user import UserTable
 from infrastructure.messengers import create_adapter
@@ -188,7 +188,7 @@ class HookRouterService:
         bot: BotInstanceTable,
         adapter: IMessengerAdapter,
     ) -> None:
-        """Route to SessionService based on command/payload."""
+        """Module-aware dispatch: estimator (Batch) vs finance (Stream)."""
         # Answer callback first (dismiss button loading state)
         if envelope.is_callback and envelope.raw_callback_id:
             try:
@@ -196,6 +196,27 @@ class HookRouterService:
             except ValueError:
                 logger.warning("Failed to answer callback")
 
+        module_type = bot.module_type
+        if module_type == "estimator":
+            await self._dispatch_estimator(envelope, user, bot, adapter)
+        elif module_type == "finance":
+            await self._dispatch_finance(envelope, user, bot, adapter)
+        else:
+            logger.warning("Unknown module_type=%s for bot=%s", module_type, bot.id)
+            await self._safe_send(
+                adapter,
+                envelope.chat_id,
+                "Неизвестный тип модуля. Обратитесь к администратору.",
+            )
+
+    async def _dispatch_estimator(
+        self,
+        envelope: IncomingEnvelope,
+        user: UserTable,
+        bot: BotInstanceTable,
+        adapter: IMessengerAdapter,
+    ) -> None:
+        """Batch mode: Redis FSM with /new, /compile, accumulate."""
         state = await self._session_service.get_state(user.id)
 
         if envelope.is_command:
@@ -285,6 +306,84 @@ class HookRouterService:
                 adapter,
                 envelope.chat_id,
                 "Отправьте /new для начала новой сессии.",
+            )
+
+    async def _dispatch_finance(
+        self,
+        envelope: IncomingEnvelope,
+        user: UserTable,
+        bot: BotInstanceTable,
+        adapter: IMessengerAdapter,
+    ) -> None:
+        """Stream mode: per-message AI processing + /report for CSV."""
+        if envelope.is_command:
+            if envelope.text == "/report":
+                try:
+                    celery_app.send_task(
+                        "generate_report",
+                        kwargs={
+                            "user_id": str(user.id),
+                            "company_id": str(user.company_id),
+                            "bot_instance_id": str(bot.id),
+                            "chat_id": envelope.chat_id,
+                            "messenger_type": envelope.messenger_type,
+                            "bot_token": bot.token,
+                        },
+                    )
+                    await self._safe_send(
+                        adapter,
+                        envelope.chat_id,
+                        "⏳ Формирую отчёт за текущий месяц...",
+                    )
+                except OperationalError:
+                    logger.exception("Celery broker unavailable")
+                    await self._safe_send(
+                        adapter,
+                        envelope.chat_id,
+                        "Система временно недоступна. Попробуйте позже.",
+                    )
+                return
+
+            # /new, /compile, or any other command
+            await self._safe_send(
+                adapter,
+                envelope.chat_id,
+                "В финансовом модуле эти команды не используются. "
+                "Просто отправляйте чеки или расходы поштучно, "
+                "а для выписки используйте /report.",
+            )
+            return
+
+        # Non-command message or file → stream item
+        item = {
+            "text": envelope.text,
+            "file_id": envelope.file_id,
+            "file_type": envelope.file_type,
+            "file_name": envelope.file_name,
+        }
+        snapshot = SessionSnapshot(
+            user_id=user.id,
+            company_id=uuid.UUID(str(user.company_id)),
+            bot_instance_id=uuid.UUID(str(bot.id)),
+            module_type=bot.module_type,
+            chat_id=envelope.chat_id,
+            messenger_type=envelope.messenger_type,
+            bot_token=bot.token,
+            bot_config=bot.config,
+            items=[item],
+        )
+        try:
+            celery_app.send_task(
+                "process_stream_item",
+                kwargs={"snapshot": snapshot.model_dump(mode="json")},
+            )
+            await self._safe_send(adapter, envelope.chat_id, "⏳ Анализирую...")
+        except OperationalError:
+            logger.exception("Celery broker unavailable")
+            await self._safe_send(
+                adapter,
+                envelope.chat_id,
+                "Система временно недоступна. Попробуйте позже.",
             )
 
     @staticmethod
