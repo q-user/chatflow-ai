@@ -11,7 +11,8 @@ import os
 import uuid
 import httpx
 from kombu.exceptions import OperationalError
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import sentry_sdk
 from infrastructure.database.models.project import ProjectTable
@@ -141,6 +142,236 @@ def compile_session(self, snapshot: dict) -> dict:
         sentry_sdk.capture_exception(exc)
         logger.exception("compile_session failed for project %s", project_id)
         raise
+
+
+@celery_app.task(
+    name="process_stream_item",
+    bind=True,
+    autoretry_for=(httpx.RequestError, OperationalError),
+    retry_backoff=30,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3,
+    soft_time_limit=900,
+    time_limit=960,
+)
+def process_stream_item(self, snapshot: dict) -> dict:
+    """Process a single finance-stream item (text or file).
+
+    Creates a Project record, runs the finance module handler,
+    updates status, and delivers CSV artifact to the user.
+
+    :param snapshot: SessionSnapshot dict with single item in items list.
+    :returns: Dict with project_id and status.
+    """
+    db_session._init_sync_engine()
+
+    if db_session.sync_session_factory is None:
+        raise RuntimeError(
+            "sync_session_factory is not initialized. "
+            "Ensure psycopg2-binary is installed and DATABASE_SYNC_URL is set correctly."
+        )
+
+    project_id = None
+    try:
+        with db_session.sync_session_factory() as session:
+            project = ProjectTable(
+                company_id=snapshot["company_id"],
+                user_id=snapshot["user_id"],
+                bot_instance_id=snapshot["bot_instance_id"],
+                module_type=snapshot.get("module_type", "finance"),
+                status="pending",
+                input_data={"items": snapshot.get("items", [])},
+            )
+            session.add(project)
+            session.flush()
+            project_id = str(project.id)
+
+            handler = _finance_module_handler
+            bot_config = snapshot.get("bot_config")
+            result = handler(
+                items=snapshot.get("items", []),
+                module_config=bot_config,
+                bot_token=snapshot.get("bot_token"),
+                messenger_type=snapshot.get("messenger_type"),
+            )
+
+            project.status = "completed"
+            project.result_data = result
+            project.completed_at = datetime.now(timezone.utc)
+            session.commit()
+
+            artifact_path = result.get("artifact_path")
+            if (
+                artifact_path
+                and snapshot.get("chat_id")
+                and snapshot.get("messenger_type")
+            ):
+                _deliver_artifact(snapshot, artifact_path)
+
+            return {"project_id": project_id, "status": "completed"}
+
+    except Exception as exc:
+        if project_id:
+            try:
+                with db_session.sync_session_factory() as session:
+                    project = session.get(ProjectTable, uuid.UUID(project_id))
+                    if project:
+                        project.status = "failed"
+                        project.error_message = str(exc)
+                        session.commit()
+            except Exception:
+                logger.exception("Failed to update project status for %s", project_id)
+
+        sentry_sdk.capture_exception(exc)
+        logger.exception("process_stream_item failed for project %s", project_id)
+        raise
+
+
+@celery_app.task(
+    name="generate_report",
+    bind=True,
+    autoretry_for=(httpx.RequestError, OperationalError),
+    retry_backoff=30,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3,
+    soft_time_limit=300,
+    time_limit=360,
+)
+def generate_report(
+    self,
+    user_id: str,
+    company_id: str,
+    bot_instance_id: str,
+    chat_id: str,
+    messenger_type: str,
+    bot_token: str,
+    date_from: str,
+    date_to: str,
+    period_days: int = 7,
+) -> dict:
+    """Generate a CSV report from finance projects in the given date range.
+
+    Queries completed finance projects for the user/company, extracts
+    all rows from result_data, writes a combined CSV, and delivers it.
+
+    :param user_id: UUID string of the user.
+    :param company_id: UUID string of the company.
+    :param bot_instance_id: UUID string of the bot instance.
+    :param chat_id: Chat ID to deliver the report to.
+    :param messenger_type: Messenger type for delivery.
+    :param bot_token: Bot token for delivery.
+    :param date_from: ISO date string YYYY-MM-DD (inclusive).
+    :param date_to: ISO date string YYYY-MM-DD (inclusive).
+    :param period_days: Number of days in the period (for metadata).
+    :returns: Dict with report_path and rows_count.
+    """
+    db_session._init_sync_engine()
+
+    if db_session.sync_session_factory is None:
+        raise RuntimeError(
+            "sync_session_factory is not initialized. "
+            "Ensure psycopg2-binary is installed and DATABASE_SYNC_URL is set correctly."
+        )
+
+    try:
+        from sqlalchemy import select
+
+        with db_session.sync_session_factory() as session:
+            start = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
+            end = datetime.fromisoformat(date_to).replace(
+                tzinfo=timezone.utc
+            ) + timedelta(days=1)
+
+            stmt = (
+                select(ProjectTable)
+                .where(
+                    ProjectTable.company_id == uuid.UUID(company_id),
+                    ProjectTable.user_id == uuid.UUID(user_id),
+                    ProjectTable.bot_instance_id == uuid.UUID(bot_instance_id),
+                    ProjectTable.module_type == "finance",
+                    ProjectTable.status == "completed",
+                    ProjectTable.completed_at >= start,
+                    ProjectTable.completed_at < end,
+                )
+                .order_by(ProjectTable.completed_at)
+            )
+            projects: list[Any] = list(session.scalars(stmt).all())
+
+        all_rows: list[dict] = []
+        for proj in projects:
+            if proj.result_data and "rows" in (proj.result_data or {}):
+                all_rows.extend(proj.result_data["rows"])
+
+        if not all_rows:
+            _send_text_message(
+                bot_token=bot_token,
+                messenger_type=messenger_type,
+                chat_id=chat_id,
+                text=(
+                    f"Нет данных за период {date_from} — {date_to}. "
+                    "Отправьте расход или чек, а затем запросите отчёт: /report"
+                ),
+            )
+            return {"report_path": None, "rows_count": 0}
+
+        csv_path = _write_report_csv(all_rows, date_from, date_to)
+
+        snapshot = {
+            "bot_token": bot_token,
+            "messenger_type": messenger_type,
+            "chat_id": chat_id,
+        }
+        _deliver_artifact(snapshot, csv_path)
+
+        return {"report_path": csv_path, "rows_count": len(all_rows)}
+
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        logger.exception("generate_report failed for user %s", user_id)
+        raise
+
+
+def _write_report_csv(
+    rows: list[dict], date_from: str, date_to: str, output_dir: str = "/tmp"
+) -> str:
+    """Write combined report rows to CSV.
+
+    :param rows: List of row dicts from finance projects.
+    :param date_from: ISO date for filename.
+    :param date_to: ISO date for filename.
+    :param output_dir: Output directory.
+    :returns: Absolute path to the CSV file.
+    """
+    if not rows:
+        raise ValueError("No rows to write for report CSV")
+
+    fieldnames = list(rows[0].keys())
+    filename = f"report_{date_from}_{date_to}_{uuid.uuid4().hex[:8]}.csv"
+    filepath = os.path.join(output_dir, filename)
+
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return filepath
+
+
+def _send_text_message(
+    bot_token: str, messenger_type: str, chat_id: str, text: str
+) -> None:
+    """Send a plain text message via messenger adapter (sync wrapper)."""
+    adapter = create_adapter(messenger_type, bot_token)
+
+    async def _send() -> None:
+        try:
+            await adapter.send_text(chat_id=chat_id, text=text)
+        finally:
+            await adapter.aclose()
+
+    asyncio.run(_send())
 
 
 def _get_module_handler(module_type: str):

@@ -9,7 +9,7 @@ import pytest
 
 from core.domain.project import Project
 from infrastructure.task_queue.celery_app import celery_app
-from infrastructure.task_queue.tasks import _write_csv
+from infrastructure.task_queue.tasks import _write_csv, _write_report_csv
 
 
 # ──────────────────────────────────────────────
@@ -669,5 +669,331 @@ def test_compile_session_raises_when_sync_engine_fails():
             "module_type": "finance",
         }
 
-        with pytest.raises(RuntimeError, match="Failed to initialize sync DB engine"):
-            compile_session(snapshot)
+    with pytest.raises(RuntimeError, match="Failed to initialize sync DB engine"):
+        compile_session(snapshot)
+
+
+# ──────────────────────────────────────────────
+# Task registration tests
+# ──────────────────────────────────────────────
+
+
+def test_process_stream_item_task_registered():
+    assert celery_app.tasks.get("process_stream_item") is not None
+
+
+def test_generate_report_task_registered():
+    assert celery_app.tasks.get("generate_report") is not None
+
+
+# ──────────────────────────────────────────────
+# process_stream_item tests
+# ──────────────────────────────────────────────
+
+
+def test_process_stream_item_creates_project_and_delivers():
+    from infrastructure.task_queue.tasks import process_stream_item
+
+    mock_session = MagicMock()
+    mock_project = MagicMock()
+    mock_project.id = uuid.uuid4()
+    mock_session.add = MagicMock()
+    mock_session.flush = MagicMock()
+    mock_session.commit = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    mock_result = {
+        "module": "finance",
+        "artifact_path": "/tmp/fin.csv",
+        "items_processed": 1,
+    }
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch(
+            "infrastructure.task_queue.tasks._finance_module_handler",
+            return_value=mock_result,
+        ),
+        patch("infrastructure.task_queue.tasks._deliver_artifact") as mock_deliver,
+    ):
+        snapshot = {
+            "company_id": str(uuid.uuid4()),
+            "user_id": str(uuid.uuid4()),
+            "bot_instance_id": str(uuid.uuid4()),
+            "module_type": "finance",
+            "items": [{"text": "Кофе 200 руб"}],
+            "chat_id": "123",
+            "messenger_type": "TG",
+            "bot_token": "tok",
+            "bot_config": None,
+        }
+        result = process_stream_item(snapshot)
+
+    assert result["status"] == "completed"
+    mock_deliver.assert_called_once()
+
+
+def test_process_stream_item_failure_marks_project_failed():
+    from infrastructure.task_queue.tasks import process_stream_item
+
+    mock_session = MagicMock()
+    mock_session.add = MagicMock()
+    mock_session.flush = MagicMock()
+    mock_session.commit = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    fail_session = MagicMock()
+    fail_project = MagicMock()
+    fail_session.get = MagicMock(return_value=fail_project)
+    fail_session.commit = MagicMock()
+    fail_session.__enter__ = MagicMock(return_value=fail_session)
+    fail_session.__exit__ = MagicMock(return_value=False)
+
+    call_count = 0
+
+    def session_factory():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return mock_session
+        return fail_session
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            side_effect=session_factory,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch(
+            "infrastructure.task_queue.tasks._finance_module_handler",
+            side_effect=ValueError("AI error"),
+        ),
+        patch("infrastructure.task_queue.tasks.sentry_sdk") as mock_sentry,
+    ):
+        snapshot = {
+            "company_id": str(uuid.uuid4()),
+            "user_id": str(uuid.uuid4()),
+            "bot_instance_id": str(uuid.uuid4()),
+            "module_type": "finance",
+            "items": [{"text": "test"}],
+        }
+
+        with pytest.raises(ValueError, match="AI error"):
+            process_stream_item(snapshot)
+
+    mock_sentry.capture_exception.assert_called_once()
+    fail_project.status = "failed"
+
+
+def test_process_stream_item_sync_engine_not_initialized():
+    from infrastructure.task_queue.tasks import process_stream_item
+
+    with (
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.database.session.sync_session_factory", None),
+    ):
+        with pytest.raises(
+            RuntimeError, match="sync_session_factory is not initialized"
+        ):
+            process_stream_item({"items": []})
+
+
+# ──────────────────────────────────────────────
+# generate_report tests
+# ──────────────────────────────────────────────
+
+
+def test_generate_report_with_rows(tmp_path):
+    from infrastructure.task_queue.tasks import generate_report
+
+    company_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    bot_id = str(uuid.uuid4())
+
+    mock_proj = MagicMock()
+    mock_proj.result_data = {
+        "rows": [{"date": "2025-04-25", "amount": 100, "category": "food"}]
+    }
+
+    mock_session = MagicMock()
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [mock_proj]
+    mock_session.scalars.return_value = mock_scalars
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.task_queue.tasks._write_report_csv") as mock_csv,
+        patch("infrastructure.task_queue.tasks._deliver_artifact") as mock_deliver,
+    ):
+        mock_csv.return_value = "/tmp/report.csv"
+
+        result = generate_report(
+            user_id=user_id,
+            company_id=company_id,
+            bot_instance_id=bot_id,
+            chat_id="123",
+            messenger_type="TG",
+            bot_token="tok",
+            date_from="2025-04-25",
+            date_to="2025-05-01",
+            period_days=7,
+        )
+
+    assert result["rows_count"] == 1
+    mock_deliver.assert_called_once()
+
+
+def test_generate_report_no_rows_sends_text():
+    from infrastructure.task_queue.tasks import generate_report
+
+    company_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    bot_id = str(uuid.uuid4())
+
+    mock_session = MagicMock()
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = []
+    mock_session.scalars.return_value = mock_scalars
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.task_queue.tasks._send_text_message") as mock_send,
+    ):
+        result = generate_report(
+            user_id=user_id,
+            company_id=company_id,
+            bot_instance_id=bot_id,
+            chat_id="123",
+            messenger_type="TG",
+            bot_token="tok",
+            date_from="2025-04-01",
+            date_to="2025-04-30",
+            period_days=30,
+        )
+
+    assert result["rows_count"] == 0
+    assert result["report_path"] is None
+    mock_send.assert_called_once()
+    call_kwargs = mock_send.call_args[1]
+    assert "Нет данных" in call_kwargs["text"]
+
+
+def test_generate_report_sync_engine_not_initialized():
+    from infrastructure.task_queue.tasks import generate_report
+
+    with (
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.database.session.sync_session_factory", None),
+    ):
+        with pytest.raises(
+            RuntimeError, match="sync_session_factory is not initialized"
+        ):
+            generate_report(
+                user_id=str(uuid.uuid4()),
+                company_id=str(uuid.uuid4()),
+                bot_instance_id=str(uuid.uuid4()),
+                chat_id="123",
+                messenger_type="TG",
+                bot_token="tok",
+                date_from="2025-04-01",
+                date_to="2025-04-30",
+            )
+
+
+def test_generate_report_failure_sentry():
+    from infrastructure.task_queue.tasks import generate_report
+
+    mock_session = MagicMock()
+    mock_session.scalars.side_effect = Exception("DB boom")
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.task_queue.tasks.sentry_sdk") as mock_sentry,
+    ):
+        with pytest.raises(Exception, match="DB boom"):
+            generate_report(
+                user_id=str(uuid.uuid4()),
+                company_id=str(uuid.uuid4()),
+                bot_instance_id=str(uuid.uuid4()),
+                chat_id="123",
+                messenger_type="TG",
+                bot_token="tok",
+                date_from="2025-04-01",
+                date_to="2025-04-30",
+            )
+
+    mock_sentry.capture_exception.assert_called_once()
+
+
+# ──────────────────────────────────────────────
+# _write_report_csv tests
+# ──────────────────────────────────────────────
+
+
+def test_write_report_csv_creates_file(tmp_path):
+    rows = [
+        {"date": "2025-04-25", "description": "Coffee", "amount": 200},
+        {"date": "2025-04-26", "description": "Taxi", "amount": 500},
+    ]
+    filepath = _write_report_csv(
+        rows, "2025-04-01", "2025-04-30", output_dir=str(tmp_path)
+    )
+
+    assert os.path.exists(filepath)
+    assert "report_2025-04-01_2025-04-30" in filepath
+
+    with open(filepath, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        read_rows = list(reader)
+
+    assert len(read_rows) == 2
+    assert read_rows[0]["description"] == "Coffee"
+
+
+def test_write_report_csv_empty_rows_raises():
+    with pytest.raises(ValueError, match="No rows to write"):
+        _write_report_csv([], "2025-04-01", "2025-04-30")
+
+
+# ──────────────────────────────────────────────
+# _send_text_message tests
+# ──────────────────────────────────────────────
+
+
+def test_send_text_message_calls_adapter():
+    from infrastructure.task_queue.tasks import _send_text_message
+
+    mock_adapter = AsyncMock()
+    mock_adapter.aclose = AsyncMock()
+
+    with patch(
+        "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+    ):
+        _send_text_message("tok", "TG", "123", "Hello")
+
+    mock_adapter.send_text.assert_awaited_once_with(chat_id="123", text="Hello")
+    mock_adapter.aclose.assert_awaited_once()
