@@ -653,14 +653,12 @@ def test_init_sync_engine_raises_on_failure():
 
 
 def test_compile_session_raises_when_sync_engine_fails():
-    """compile_session raises RuntimeError (not TypeError) when sync engine init fails."""
+    """compile_session raises RuntimeError when sync_session_factory is None."""
     from infrastructure.task_queue.tasks import compile_session
 
-    with patch(
-        "infrastructure.database.session._init_sync_engine",
-        side_effect=RuntimeError(
-            "Failed to initialize sync DB engine: No module named 'psycopg2'"
-        ),
+    with (
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch("infrastructure.database.session.sync_session_factory", None),
     ):
         snapshot = {
             "company_id": uuid.uuid4(),
@@ -669,8 +667,10 @@ def test_compile_session_raises_when_sync_engine_fails():
             "module_type": "finance",
         }
 
-    with pytest.raises(RuntimeError, match="Failed to initialize sync DB engine"):
-        compile_session(snapshot)
+        with pytest.raises(
+            RuntimeError, match="sync_session_factory is not initialized"
+        ):
+            compile_session(snapshot)
 
 
 # ──────────────────────────────────────────────
