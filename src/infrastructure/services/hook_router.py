@@ -7,7 +7,9 @@ This service lives in infrastructure because it depends on SQLAlchemy models.
 """
 
 import logging
+import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from kombu.exceptions import OperationalError
@@ -317,7 +319,10 @@ class HookRouterService:
     ) -> None:
         """Stream mode: per-message AI processing + /report for CSV."""
         if envelope.is_command:
-            if envelope.text == "/report":
+            if envelope.text and envelope.text.startswith("/report"):
+                period_days, date_from, date_to = self._parse_report_period(
+                    envelope.text
+                )
                 try:
                     celery_app.send_task(
                         "generate_report",
@@ -328,12 +333,15 @@ class HookRouterService:
                             "chat_id": envelope.chat_id,
                             "messenger_type": envelope.messenger_type,
                             "bot_token": bot.token,
+                            "date_from": date_from,
+                            "date_to": date_to,
+                            "period_days": period_days,
                         },
                     )
                     await self._safe_send(
                         adapter,
                         envelope.chat_id,
-                        "⏳ Формирую отчёт за текущий месяц...",
+                        f"⏳ Формирую отчёт за {period_days}д...",
                     )
                 except OperationalError:
                     logger.exception("Celery broker unavailable")
@@ -344,13 +352,12 @@ class HookRouterService:
                     )
                 return
 
-            # /new, /compile, or any other command
             await self._safe_send(
                 adapter,
                 envelope.chat_id,
-                "В финансовом модуле эти команды не используются. "
-                "Просто отправляйте чеки или расходы поштучно, "
-                "а для выписки используйте /report.",
+                "Отправьте расход или чек — я обработаю. "
+                "Для отчёта: /report (по умолчанию 7д), "
+                "/report 1d, /report 1w, /report 1m.",
             )
             return
 
@@ -385,6 +392,32 @@ class HookRouterService:
                 envelope.chat_id,
                 "Система временно недоступна. Попробуйте позже.",
             )
+
+    @staticmethod
+    def _parse_report_period(text: str) -> tuple[int, str, str]:
+        """Parse /report command and return (period_days, date_from, date_to).
+
+        Formats:
+            /report          → 7 days (default)
+            /report 1d       → 1 day
+            /report 2w       → 14 days
+            /report 3m       → 90 days
+
+        :returns: (period_days, date_from ISO, date_to ISO)
+        """
+        match = re.match(r"^/report\s+(\d+)([dwm])", text)
+        if match:
+            value = int(match.group(1))
+            unit = match.group(2)
+            multipliers = {"d": 1, "w": 7, "m": 30}
+            period_days = value * multipliers[unit]
+        else:
+            period_days = 7
+
+        now = datetime.now(timezone.utc)
+        date_from = (now - timedelta(days=period_days)).strftime("%Y-%m-%d")
+        date_to = now.strftime("%Y-%m-%d")
+        return period_days, date_from, date_to
 
     @staticmethod
     def _get_messenger_field(messenger_type: str) -> str | None:

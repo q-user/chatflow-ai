@@ -566,7 +566,7 @@ async def test_finance_report_enqueues_generate_report(
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Finance: /report → enqueues generate_report."""
+    """Finance: /report → enqueues generate_report with default 7d period."""
     telegram_id = f"fin_report_{_make_unique_id()}"
     user = _make_user("fin_report_user", test_company.id, telegram_id)
     db_session.add(user)
@@ -586,6 +586,9 @@ async def test_finance_report_enqueues_generate_report(
     kw = call_kwargs[1]["kwargs"]
     assert kw["user_id"] == str(user.id)
     assert kw["chat_id"] == telegram_id
+    assert kw["period_days"] == 7
+    assert "date_from" in kw
+    assert "date_to" in kw
 
     mock_adapter.send_text.assert_called_once()
     call_args = mock_adapter.send_text.call_args
@@ -593,84 +596,173 @@ async def test_finance_report_enqueues_generate_report(
 
 
 @pytest.mark.asyncio
-async def test_finance_new_command_returns_polite_error(
+async def test_finance_report_with_period_1d(
     hook_router: HookRouterService,
     finance_bot_instance: BotInstanceTable,
     mock_adapter,
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Finance: /new → polite error explaining finance mode."""
-    telegram_id = f"fin_new_{_make_unique_id()}"
-    user = _make_user("fin_new_user", test_company.id, telegram_id)
+    """Finance: /report 1d → enqueues generate_report with period_days=1."""
+    telegram_id = f"fin_r1d_{_make_unique_id()}"
+    user = _make_user("fin_r1d_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = _tg_text_payload(telegram_id, "/new")
+    payload = _tg_text_payload(telegram_id, "/report 1d")
 
-    status_code, _ = await hook_router.process_webhook(
-        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
-    )
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
     assert status_code == 200
-
-    mock_adapter.send_text.assert_called_once()
-    call_args = mock_adapter.send_text.call_args
-    msg = call_args[0][1].lower()
-    assert "не используются" in msg or "/report" in msg
+    kw = mock_celery.send_task.call_args[1]["kwargs"]
+    assert kw["period_days"] == 1
 
 
 @pytest.mark.asyncio
-async def test_finance_compile_command_returns_polite_error(
+async def test_finance_report_with_period_1w(
     hook_router: HookRouterService,
     finance_bot_instance: BotInstanceTable,
     mock_adapter,
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Finance: /compile → polite error explaining finance mode."""
-    telegram_id = f"fin_compile_{_make_unique_id()}"
-    user = _make_user("fin_compile_user", test_company.id, telegram_id)
+    """Finance: /report 1w → enqueues generate_report with period_days=7."""
+    telegram_id = f"fin_r1w_{_make_unique_id()}"
+    user = _make_user("fin_r1w_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = _tg_text_payload(telegram_id, "/compile")
+    payload = _tg_text_payload(telegram_id, "/report 1w")
 
-    status_code, _ = await hook_router.process_webhook(
-        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
-    )
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
     assert status_code == 200
-
-    mock_adapter.send_text.assert_called_once()
-    call_args = mock_adapter.send_text.call_args
-    msg = call_args[0][1].lower()
-    assert "не используются" in msg or "/report" in msg
+    kw = mock_celery.send_task.call_args[1]["kwargs"]
+    assert kw["period_days"] == 7
 
 
 @pytest.mark.asyncio
-async def test_finance_unknown_command_returns_polite_error(
+async def test_finance_report_with_period_1m(
     hook_router: HookRouterService,
     finance_bot_instance: BotInstanceTable,
     mock_adapter,
     db_session: AsyncSession,
     test_company: CompanyTable,
 ):
-    """Finance: /unknown → same polite error as /new, /compile."""
-    telegram_id = f"fin_unk_{_make_unique_id()}"
-    user = _make_user("fin_unk_user", test_company.id, telegram_id)
+    """Finance: /report 1m → enqueues generate_report with period_days=30."""
+    telegram_id = f"fin_r1m_{_make_unique_id()}"
+    user = _make_user("fin_r1m_user", test_company.id, telegram_id)
     db_session.add(user)
     await db_session.flush()
 
-    payload = _tg_text_payload(telegram_id, "/start")
+    payload = _tg_text_payload(telegram_id, "/report 1m")
 
-    status_code, _ = await hook_router.process_webhook(
-        "TG", uuid.UUID(str(finance_bot_instance.id)), payload
-    )
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
     assert status_code == 200
+    kw = mock_celery.send_task.call_args[1]["kwargs"]
+    assert kw["period_days"] == 30
 
-    mock_adapter.send_text.assert_called_once()
-    call_args = mock_adapter.send_text.call_args
-    msg = call_args[0][1].lower()
-    assert "не используются" in msg or "/report" in msg
+
+@pytest.mark.asyncio
+async def test_finance_report_with_period_3m(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /report 3m → enqueues generate_report with period_days=90."""
+    telegram_id = f"fin_r3m_{_make_unique_id()}"
+    user = _make_user("fin_r3m_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "/report 3m")
+
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    kw = mock_celery.send_task.call_args[1]["kwargs"]
+    assert kw["period_days"] == 90
+
+
+@pytest.mark.asyncio
+async def test_finance_unknown_command_returns_help(
+    hook_router: HookRouterService,
+    finance_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """Finance: /new, /compile, /start → help message with /report usage."""
+    for cmd in ["/new", "/compile", "/start"]:
+        mock_adapter.send_text.reset_mock()
+
+        telegram_id = f"fin_unk_{_make_unique_id()}"
+        user = _make_user(f"fin_unk_{cmd.strip('/')}", test_company.id, telegram_id)
+        db_session.add(user)
+        await db_session.flush()
+
+        payload = _tg_text_payload(telegram_id, cmd)
+
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
+        )
+        assert status_code == 200
+
+        mock_adapter.send_text.assert_called_once()
+        call_args = mock_adapter.send_text.call_args
+        msg = call_args[0][1].lower()
+        assert "/report" in msg
+
+
+# ──────────────────────────────────────────────
+# _parse_report_period unit tests
+# ──────────────────────────────────────────────
+
+
+def test_parse_report_period_default():
+    period_days, date_from, date_to = HookRouterService._parse_report_period("/report")
+    assert period_days == 7
+    assert date_from < date_to
+
+
+def test_parse_report_period_1d():
+    period_days, _, _ = HookRouterService._parse_report_period("/report 1d")
+    assert period_days == 1
+
+
+def test_parse_report_period_2w():
+    period_days, _, _ = HookRouterService._parse_report_period("/report 2w")
+    assert period_days == 14
+
+
+def test_parse_report_period_3m():
+    period_days, _, _ = HookRouterService._parse_report_period("/report 3m")
+    assert period_days == 90
+
+
+def test_parse_report_period_invalid_unit_falls_back_to_default():
+    period_days, _, _ = HookRouterService._parse_report_period("/report 5y")
+    assert period_days == 7
+
+
+def test_parse_report_period_garbage_falls_back_to_default():
+    period_days, _, _ = HookRouterService._parse_report_period("/report abc")
+    assert period_days == 7
 
 
 # ──────────────────────────────────────────────
