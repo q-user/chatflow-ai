@@ -7,6 +7,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 
 from infrastructure.config import settings
+from infrastructure.database.session import lifespan_db
 from presentation.api.auth import (
     auth_router,
     auth_router_cookie,
@@ -18,7 +19,7 @@ from presentation.api.otp import otp_bot_router, otp_web_router
 from presentation.web.middleware import HtmxAuthMiddleware
 from presentation.web.pages import router as web_router
 
-app = FastAPI(title="ChatFlow AI")
+app = FastAPI(title="ChatFlow AI", lifespan=lifespan_db)
 
 if settings.sentry_dsn:
     sentry_sdk.init(

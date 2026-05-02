@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import create_engine
@@ -45,6 +46,17 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, Any]:
         except Exception:
             await session.rollback()
             raise
+
+
+@asynccontextmanager
+async def lifespan_db(app: Any) -> AsyncGenerator[None, None]:
+    """FastAPI lifespan: dispose async engine on shutdown."""
+    yield
+    global _async_engine, async_session_factory
+    if _async_engine is not None:
+        await _async_engine.dispose()
+        _async_engine = None
+        async_session_factory = None
 
 
 # ── Sync engine (for Celery tasks) ──

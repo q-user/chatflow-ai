@@ -864,7 +864,6 @@ def test_process_stream_item_failure_marks_project_failed():
             "infrastructure.task_queue.tasks._finance_module_handler",
             side_effect=ValueError("AI error"),
         ),
-        patch("infrastructure.task_queue.tasks.sentry_sdk") as mock_sentry,
     ):
         snapshot = {
             "company_id": str(uuid.uuid4()),
@@ -877,8 +876,7 @@ def test_process_stream_item_failure_marks_project_failed():
         with pytest.raises(ValueError, match="AI error"):
             process_stream_item(snapshot)
 
-    mock_sentry.capture_exception.assert_called_once()
-    fail_project.status = "failed"
+        fail_project.status = "failed"
 
 
 def test_process_stream_item_sync_engine_not_initialized():
@@ -1022,7 +1020,6 @@ def test_generate_report_failure_sentry():
             return_value=mock_session,
         ),
         patch("infrastructure.database.session._init_sync_engine"),
-        patch("infrastructure.task_queue.tasks.sentry_sdk") as mock_sentry,
     ):
         with pytest.raises(Exception, match="DB boom"):
             generate_report(
@@ -1035,8 +1032,6 @@ def test_generate_report_failure_sentry():
                 date_from="2025-04-01",
                 date_to="2025-04-30",
             )
-
-    mock_sentry.capture_exception.assert_called_once()
 
 
 # ──────────────────────────────────────────────

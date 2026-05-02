@@ -1,5 +1,7 @@
 """Base class for HTTP-based messenger adapters."""
 
+import asyncio
+
 import httpx
 from infrastructure.config import settings
 
@@ -15,10 +17,15 @@ class BaseHttpAdapter:
         self._http: httpx.AsyncClient | None = http_client
         self._owns_client = http_client is None
         self._timeout = timeout
+        self._client_lock = asyncio.Lock()
 
     async def _get_http_client(self) -> httpx.AsyncClient:
-        """Lazy httpx client creation with proxy support."""
-        if self._http is None:
+        """Lazy httpx client creation with proxy support (thread-safe)."""
+        if self._http is not None:
+            return self._http
+        async with self._client_lock:
+            if self._http is not None:
+                return self._http
             kwargs: dict = {"timeout": self._timeout}
             if self._use_proxy and settings.telegram_proxy:
                 kwargs["proxy"] = settings.telegram_proxy
@@ -27,6 +34,7 @@ class BaseHttpAdapter:
 
     async def aclose(self) -> None:
         """Close the underlying httpx client if we created it."""
-        if self._owns_client and self._http is not None:
-            await self._http.aclose()
-            self._http = None
+        async with self._client_lock:
+            if self._owns_client and self._http is not None:
+                await self._http.aclose()
+                self._http = None

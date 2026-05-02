@@ -1,4 +1,4 @@
-"""OpenRouter AI adapter — Gemma 4 optimized.
+"""OpenRouter AI adapter -- Gemma 4 optimized.
 
 Uses OpenAI-compatible chat/completions format via httpx.
 """
@@ -6,6 +6,7 @@ Uses OpenAI-compatible chat/completions format via httpx.
 import base64
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -55,9 +56,9 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         self._model = model
         self._gen_params = generation_params or GEMMA4_DEFAULT_PARAMS
 
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
     # IMultiModalAI implementation
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
 
     async def generate_json(
         self,
@@ -75,8 +76,8 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
 
         content = self._extract_content(response)
 
-        # Strip CoT thinking output if present
         content = self._strip_thinking(content)
+        content = self._strip_markdown_fences(content)
 
         try:
             return json.loads(content)
@@ -100,9 +101,9 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         content = self._extract_content(response)
         return self._strip_thinking(content)
 
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
     # Message construction (Gemma 4 specific)
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
 
     def _build_messages(
         self,
@@ -116,18 +117,15 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         - System prompt prefixed with <|think|> for CoT
         - Images BEFORE text in content array
         """
-        # CoT prefix for system prompt
         cot_prompt = f"{COT_TOKEN}{system_prompt}"
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": cot_prompt},
         ]
 
-        # User message: multimodal or text-only
         if image_paths:
             content: list[dict[str, Any]] = []
 
-            # GEMMA 4: images MUST come first
             for path in image_paths:
                 b64 = self._encode_image(path)
                 mime = self._guess_mime(path)
@@ -138,7 +136,6 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
                     }
                 )
 
-            # Text AFTER images
             content.append({"type": "text", "text": text})
 
             messages.append({"role": "user", "content": content})
@@ -147,9 +144,9 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
 
         return messages
 
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
     # API call
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
 
     async def _call_api(
         self,
@@ -166,7 +163,7 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         body: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            **self._gen_params,  # temperature, top_p, top_k
+            **self._gen_params,
         }
 
         if json_mode:
@@ -178,10 +175,6 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
             len(messages),
             json_mode,
         )
-
-        # TODO: add retry layer for transient errors (429/502/503)
-        # with exponential backoff (1-2 attempts, short delay)
-        # to reduce full Celery retry cycles.
 
         try:
             resp = await http.post(url, json=body, headers=headers)
@@ -195,9 +188,9 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
                 f"AI API error {e.response.status_code}: {detail}"
             ) from e
 
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
     # Response parsing
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
 
     @staticmethod
     def _extract_content(response: dict[str, Any]) -> str:
@@ -210,24 +203,26 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
 
     @staticmethod
     def _strip_thinking(content: str) -> str:
-        """Remove Gemma 4 CoT thinking block from response.
-
-        Gemma 4 with <|think|> wraps reasoning in `````` tags.
-        The actual answer follows after the closing tag.
-        If the closing tag is missing (model ran out of tokens), returns empty string.
-        """
+        """Remove Gemma 4 CoT thinking block from response."""
         think_end_tag = "</think>"
         think_start_tag = "<|think|>"
         if think_end_tag in content:
             return content.split(think_end_tag, 1)[-1].strip()
         if content.strip().startswith(think_start_tag):
-            # Unclosed thinking — model ran out of tokens
             return ""
         return content
 
-    # ──────────────────────────────────────────────
+    @staticmethod
+    def _strip_markdown_fences(content: str) -> str:
+        """Strip markdown code fences from LLM output."""
+        stripped = content.strip()
+        stripped = re.sub(r"^```[a-zA-Z]*\n", "", stripped)
+        stripped = re.sub(r"\n```$", "", stripped)
+        return stripped
+
+    # ────────────────────────────────────────────────
     # Image encoding
-    # ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────
 
     @staticmethod
     def _encode_image(path: str) -> str:

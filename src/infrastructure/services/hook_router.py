@@ -24,7 +24,7 @@ from core.services.otp import OTPService
 from core.services.session import SessionService, SessionSnapshot
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.user import UserTable
-from infrastructure.messengers import create_adapter
+from infrastructure.messengers import UnsupportedMessengerError, create_adapter
 from infrastructure.services.messenger_link import MessengerLinkService
 from infrastructure.task_queue.celery_app import celery_app
 
@@ -96,7 +96,11 @@ class HookRouterService:
             return 403, "Bot instance is inactive"
 
         # 3. Create adapter for this bot instance (lazy creation)
-        adapter = self._adapter_factory(messenger_type, bot.token)
+        try:
+            adapter = self._adapter_factory(messenger_type, bot.token)
+        except UnsupportedMessengerError as e:
+            logger.warning("Unsupported messenger type %s: %s", messenger_type, e)
+            return 400, f"Unsupported messenger type: {messenger_type}"
 
         try:
             # 4. Parse payload via adapter
@@ -180,7 +184,7 @@ class HookRouterService:
         """Send text message, logging network errors instead of propagating."""
         try:
             await adapter.send_text(chat_id, text)
-        except ValueError as e:
+        except Exception as e:
             logger.warning("Failed to send message to chat %s: %s", chat_id, e)
 
     async def _dispatch_to_session(
@@ -318,6 +322,9 @@ class HookRouterService:
         adapter: IMessengerAdapter,
     ) -> None:
         """Stream mode: per-message AI processing + /report for CSV."""
+        if envelope.is_callback:
+            return
+
         if envelope.is_command:
             if envelope.text and envelope.text.startswith("/report"):
                 period_days, date_from, date_to = self._parse_report_period(
@@ -398,10 +405,12 @@ class HookRouterService:
         """Parse /report command and return (period_days, date_from, date_to).
 
         Formats:
-            /report          → 7 days (default)
-            /report 1d       → 1 day
-            /report 2w       → 14 days
-            /report 3m       → 90 days
+        /report → 7 days (default)
+        /report 1d → 1 day
+        /report 2w → 14 days
+        /report 3m → 90 days
+
+        Period is clamped to [1, 365] days.
 
         :returns: (period_days, date_from ISO, date_to ISO)
         """
@@ -411,6 +420,7 @@ class HookRouterService:
             unit = match.group(2)
             multipliers = {"d": 1, "w": 7, "m": 30}
             period_days = value * multipliers[unit]
+            period_days = max(1, min(period_days, 365))
         else:
             period_days = 7
 

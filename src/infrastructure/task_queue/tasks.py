@@ -14,7 +14,6 @@ from kombu.exceptions import OperationalError
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import sentry_sdk
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.database import session as db_session
 from infrastructure.messengers import create_adapter
@@ -139,7 +138,6 @@ def compile_session(self, snapshot: dict) -> dict:
             except Exception:
                 logger.exception("Failed to update project status for %s", project_id)
 
-        sentry_sdk.capture_exception(exc)
         logger.exception("compile_session failed for project %s", project_id)
         raise
 
@@ -223,7 +221,6 @@ def process_stream_item(self, snapshot: dict) -> dict:
             except Exception:
                 logger.exception("Failed to update project status for %s", project_id)
 
-        sentry_sdk.capture_exception(exc)
         logger.exception("process_stream_item failed for project %s", project_id)
         raise
 
@@ -327,8 +324,7 @@ def generate_report(
 
         return {"report_path": csv_path, "rows_count": len(all_rows)}
 
-    except Exception as exc:
-        sentry_sdk.capture_exception(exc)
+    except Exception:
         logger.exception("generate_report failed for user %s", user_id)
         raise
 
@@ -347,12 +343,16 @@ def _write_report_csv(
     if not rows:
         raise ValueError("No rows to write for report CSV")
 
-    fieldnames = list(rows[0].keys())
+    all_keys: set[str] = set()
+    for row in rows:
+        all_keys.update(row.keys())
+    fieldnames = sorted(all_keys)
+
     filename = f"report_{date_from}_{date_to}_{uuid.uuid4().hex[:8]}.csv"
     filepath = os.path.join(output_dir, filename)
 
     with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -444,14 +444,23 @@ def _finance_module_handler(
         )
     )
 
-    # 5. Generate CSV from JSON
+    # 5. Generate CSV from JSON (graceful if AI returned no rows)
+    rows = result_json.get("rows", [])
+    if not rows:
+        return {
+            "module": "finance",
+            "artifact_path": None,
+            "items_processed": len(items),
+            "rows": [],
+        }
+
     csv_path = _write_csv(result_json)
 
     return {
         "module": "finance",
         "artifact_path": csv_path,
         "items_processed": len(items),
-        "rows": result_json.get("rows", []),
+        "rows": rows,
     }
 
 
@@ -716,15 +725,16 @@ def _write_csv(data: dict, output_dir: str = "/tmp") -> str:
     if not rows:
         raise ValueError("AI returned no rows for CSV generation")
 
-    # Determine columns from first row keys
-    fieldnames = list(rows[0].keys())
+    all_keys: set[str] = set()
+    for row in rows:
+        all_keys.update(row.keys())
+    fieldnames = sorted(all_keys)
 
-    # Unique filename
     filename = f"finance_{uuid.uuid4().hex[:8]}.csv"
     filepath = os.path.join(output_dir, filename)
 
     with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
