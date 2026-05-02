@@ -568,6 +568,62 @@ async def test_finance_ai_pipeline_with_audio_and_document():
     assert "Содержимое документа" in call_kwargs["text"]
 
 
+@pytest.mark.asyncio
+async def test_finance_ai_pipeline_image_only_no_text():
+    """_finance_ai_pipeline with images and empty combined_text uses placeholder."""
+    from infrastructure.task_queue.tasks import _finance_ai_pipeline
+
+    mock_ai = AsyncMock()
+    mock_ai.generate_json = AsyncMock(return_value={"rows": [{"a": 1}]})
+    mock_ai.aclose = AsyncMock()
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_abc123.jpg")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "receipt_1", "file_type": "image/jpeg"}]
+
+    with (
+        patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+    ):
+        result = await _finance_ai_pipeline(
+            "prompt", "", file_items, "test_token", "TG"
+        )
+
+    assert result == {"rows": [{"a": 1}]}
+    call_kwargs = mock_ai.generate_json.call_args[1]
+    assert call_kwargs["image_paths"] == ["/tmp/img_abc123.jpg"]
+    assert "Распознай данные" in call_kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_finance_ai_pipeline_no_text_no_images_raises():
+    """_finance_ai_pipeline raises ValueError when no text and no images."""
+    from infrastructure.task_queue.tasks import _finance_ai_pipeline
+
+    mock_ai = AsyncMock()
+    mock_ai.generate_json = AsyncMock(return_value={"rows": []})
+    mock_ai.aclose = AsyncMock()
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(side_effect=Exception("fail"))
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "bad", "file_type": "image/jpeg"}]
+
+    with (
+        patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+    ):
+        with pytest.raises(ValueError, match="No text data for processing"):
+            await _finance_ai_pipeline("prompt", "", file_items, "test_token", "TG")
+
+
 def test_deliver_artifact_cleanup_once():
     """_deliver_artifact deletes the artifact exactly once."""
     from infrastructure.task_queue.tasks import _deliver_artifact
@@ -587,6 +643,31 @@ def test_deliver_artifact_cleanup_once():
             "chat_id": "123456",
         }
         _deliver_artifact(snapshot, "/tmp/test_file.csv")
+
+    mock_unlink.assert_called_once_with("/tmp/test_file.csv")
+
+
+def test_deliver_artifact_cleanup_on_send_failure():
+    """_deliver_artifact deletes CSV even when send_file raises."""
+    from infrastructure.task_queue.tasks import _deliver_artifact
+
+    mock_adapter = AsyncMock()
+    mock_adapter.send_file = AsyncMock(side_effect=RuntimeError("send failed"))
+    mock_adapter.aclose = AsyncMock()
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        ),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        snapshot = {
+            "bot_token": "test_token",
+            "messenger_type": "TG",
+            "chat_id": "123456",
+        }
+        with pytest.raises(RuntimeError, match="send failed"):
+            _deliver_artifact(snapshot, "/tmp/test_file.csv")
 
     mock_unlink.assert_called_once_with("/tmp/test_file.csv")
 
@@ -707,6 +788,15 @@ def test_process_stream_item_creates_project_and_delivers():
         "module": "finance",
         "artifact_path": "/tmp/fin.csv",
         "items_processed": 1,
+        "rows": [
+            {
+                "date": "2026-05-01",
+                "description": "Coffee",
+                "category": "Food",
+                "amount": 200,
+                "currency": "RUB",
+            }
+        ],
     }
 
     with (

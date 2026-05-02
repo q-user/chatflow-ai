@@ -451,6 +451,7 @@ def _finance_module_handler(
         "module": "finance",
         "artifact_path": csv_path,
         "items_processed": len(items),
+        "rows": result_json.get("rows", []),
     }
 
 
@@ -623,16 +624,15 @@ async def _finance_ai_pipeline(
         full_text = combined_text
 
     if not full_text:
-        parts = []
-        if combined_text:
-            parts.append(f"message text ({len(combined_text)} chars)")
-        if file_items:
-            parts.append(f"{len(file_items)} file(s) failed to download or parse")
+        if image_paths:
+            full_text = "Распознай данные с прикреплённого изображения"
         else:
-            parts.append("no files attached")
-        if not combined_text and not file_items:
-            parts.append("no text and no files")
-        raise ValueError(f"No text data for processing: {'; '.join(parts)}")
+            parts = []
+            if file_items:
+                parts.append(f"{len(file_items)} file(s) failed to download or parse")
+            else:
+                parts.append("no text and no files")
+            raise ValueError(f"No text data for processing: {'; '.join(parts)}")
 
     try:
         return await _ai_generate_json(
