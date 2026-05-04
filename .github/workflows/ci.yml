@@ -40,6 +40,8 @@ jobs:
           ENVIRONMENT: test
           TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/chatflow_test_db
           REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-for-ci-only
+          BOT_API_KEY: test_bot_api_key
         run: uv run pytest --cov --cov-fail-under=80
   build-and-push:
     needs: test-and-lint
