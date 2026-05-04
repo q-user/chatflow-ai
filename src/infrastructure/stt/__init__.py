@@ -22,7 +22,9 @@ def create_stt_adapter() -> ISpeechToText:
 
     if provider == "riva":
         if not settings.nvidia_api_key:
-            raise ValueError("NVIDIA_API_KEY is not set. Configure it in .env or environment.")
+            raise ValueError(
+                "NVIDIA_API_KEY is not set. Configure it in .env or environment."
+            )
         return NvidiaRivaAdapter(
             api_key=settings.nvidia_api_key,
             server_url=settings.riva_server_url,

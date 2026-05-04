@@ -157,7 +157,7 @@ def test_deliver_artifact_calls_send_file():
     mock_adapter.aclose = AsyncMock()
 
     with patch(
-        "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        "infrastructure.task_queue.tasks._adapter_factory", return_value=mock_adapter
     ):
         snapshot = {
             "bot_token": "test_token",
@@ -178,7 +178,7 @@ def test_deliver_artifact_missing_fields():
     """_deliver_artifact skips delivery when required fields are missing."""
     from infrastructure.task_queue.tasks import _deliver_artifact
 
-    with patch("infrastructure.task_queue.tasks.create_adapter") as mock_create:
+    with patch("infrastructure.task_queue.tasks._adapter_factory") as mock_create:
         # Missing bot_token
         snapshot = {"messenger_type": "TG", "chat_id": "123"}
         _deliver_artifact(snapshot, "/tmp/file.csv")
@@ -246,7 +246,8 @@ async def test_download_and_parse_media_images_only():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
@@ -273,7 +274,8 @@ async def test_download_and_parse_media_audio():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
     ):
@@ -302,7 +304,8 @@ async def test_download_and_parse_media_document():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
         patch(
@@ -330,7 +333,8 @@ async def test_download_and_parse_media_skip_failed():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
@@ -391,7 +395,8 @@ async def test_finance_ai_pipeline_with_images():
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         result = await _finance_ai_pipeline(
@@ -444,7 +449,8 @@ async def test_finance_ai_pipeline_all_images_fail():
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         result = await _finance_ai_pipeline(
@@ -480,7 +486,8 @@ async def test_finance_ai_pipeline_with_audio():
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         result = await _finance_ai_pipeline(
@@ -512,7 +519,8 @@ async def test_finance_ai_pipeline_with_document():
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch(
             "infrastructure.parsers.process_document", return_value="Extracted doc text"
@@ -554,7 +562,8 @@ async def test_finance_ai_pipeline_with_audio_and_document():
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch("infrastructure.parsers.process_document", return_value="Doc text"),
     ):
@@ -586,7 +595,8 @@ async def test_finance_ai_pipeline_image_only_no_text():
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         result = await _finance_ai_pipeline(
@@ -617,7 +627,8 @@ async def test_finance_ai_pipeline_no_text_no_images_raises():
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
     ):
         with pytest.raises(ValueError, match="No text data for processing"):
@@ -633,7 +644,8 @@ def test_deliver_artifact_cleanup_once():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
     ):
@@ -657,7 +669,8 @@ def test_deliver_artifact_cleanup_on_send_failure():
 
     with (
         patch(
-            "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
         ),
         patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
     ):
@@ -1076,9 +1089,330 @@ def test_send_text_message_calls_adapter():
     mock_adapter.aclose = AsyncMock()
 
     with patch(
-        "infrastructure.task_queue.tasks.create_adapter", return_value=mock_adapter
+        "infrastructure.task_queue.tasks._adapter_factory", return_value=mock_adapter
     ):
         _send_text_message("tok", "TG", "123", "Hello")
 
     mock_adapter.send_text.assert_awaited_once_with(chat_id="123", text="Hello")
     mock_adapter.aclose.assert_awaited_once()
+
+
+# ──────────────────────────────────────────────
+# T8: File cleanup leak tests
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_audio_unlinks_on_success():
+    """_download_and_parse_media unlinks audio file after transcription."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio_test.ogg")
+    mock_adapter.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Transcribed text")
+    mock_stt.aclose = AsyncMock()
+
+    file_items = [{"file_id": "audio1", "file_type": "audio/ogg"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        mock_unlink.assert_called_once_with("/tmp/audio_test.ogg")
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_audio_unlinks_on_transcribe_failure():
+    """_download_and_parse_media unlinks audio file even if transcription fails."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio_fail.ogg")
+    mock_adapter.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(side_effect=RuntimeError("STT error"))
+    mock_stt.aclose = AsyncMock()
+
+    file_items = [{"file_id": "audio_fail", "file_type": "audio/ogg"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        mock_unlink.assert_called_once_with("/tmp/audio_fail.ogg")
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_document_unlinks_on_success():
+    """_download_and_parse_media unlinks document file after parsing."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/doc_test.pdf")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "doc1", "file_type": "application/pdf"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch("infrastructure.parsers.process_document", return_value="Doc content"),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        mock_unlink.assert_called_once_with("/tmp/doc_test.pdf")
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_document_unlinks_on_parse_failure():
+    """_download_and_parse_media unlinks document even if parsing fails."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/doc_fail.pdf")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "doc_fail", "file_type": "application/pdf"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch(
+            "infrastructure.parsers.process_document",
+            side_effect=RuntimeError("Parse error"),
+        ),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        mock_unlink.assert_called_once_with("/tmp/doc_fail.pdf")
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_image_unlinks_on_exception():
+    """_download_and_parse_media removes image from paths and unlinks on processing error."""
+    from infrastructure.task_queue.tasks import (
+        _download_and_parse_media,
+        _get_file_info,
+    )
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_fail.jpg")
+    mock_adapter.aclose = AsyncMock()
+
+    real_get_file_info = _get_file_info
+
+    def _fake_get_file_info(mime):
+        if mime == "image/jpeg":
+            return "image", ".jpg"
+        return real_get_file_info(mime)
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch(
+            "infrastructure.task_queue.tasks._get_file_info",
+            side_effect=_fake_get_file_info,
+        ),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+        patch(
+            "infrastructure.task_queue.tasks.image_paths_append",
+            side_effect=RuntimeError("Append error"),
+        ),
+    ):
+        file_items = [{"file_id": "img1", "file_type": "image/jpeg"}]
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        assert paths == []
+        mock_unlink.assert_called_once_with("/tmp/img_fail.jpg")
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_unlink_oserror_swallowed():
+    """_download_and_parse_media swallows OSError on unlink (file already gone)."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio_gone.ogg")
+    mock_adapter.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Text")
+    mock_stt.aclose = AsyncMock()
+
+    file_items = [{"file_id": "audio_gone", "file_type": "audio/ogg"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch(
+            "infrastructure.task_queue.tasks.os.unlink", side_effect=OSError("No file")
+        ),
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        assert "[Транскрипция аудио]" in text
+
+
+# ──────────────────────────────────────────────
+# T10: _write_csv OSError handling tests
+# ──────────────────────────────────────────────
+
+
+def test_write_csv_oserror_raises_runtime_error(tmp_path):
+    """_write_csv raises RuntimeError on OSError (e.g. disk full)."""
+    from infrastructure.task_queue.tasks import _write_csv
+
+    data = {"rows": [{"date": "2024-01-01", "amount": 100}]}
+
+    with patch("builtins.open", side_effect=OSError("No space left on device")):
+        with pytest.raises(RuntimeError, match="Failed to write CSV"):
+            _write_csv(data)
+
+
+def test_write_report_csv_oserror_raises_runtime_error():
+    """_write_report_csv raises RuntimeError on OSError."""
+    from infrastructure.task_queue.tasks import _write_report_csv
+
+    rows = [{"date": "2025-01-01", "amount": 100}]
+
+    with patch("builtins.open", side_effect=OSError("Permission denied")):
+        with pytest.raises(RuntimeError, match="Failed to write report CSV"):
+            _write_report_csv(rows, "2025-01-01", "2025-01-31")
+
+
+# ──────────────────────────────────────────────
+# T12: MIME handling tests for _download_and_parse_media
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_webp_image():
+    """_download_and_parse_media handles image/webp correctly."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_test.webp")
+    mock_adapter.aclose = AsyncMock()
+
+    file_items = [{"file_id": "webp1", "file_type": "image/webp"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        assert text == ""
+        assert len(paths) == 1
+        assert paths[0] == "/tmp/img_test.webp"
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_opus_audio():
+    """_download_and_parse_media handles audio/x-opus correctly."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/audio_opus.opus")
+    mock_adapter.aclose = AsyncMock()
+
+    mock_stt = AsyncMock()
+    mock_stt.transcribe = AsyncMock(return_value="Opus transcription")
+    mock_stt.aclose = AsyncMock()
+
+    file_items = [{"file_id": "opus1", "file_type": "audio/x-opus"}]
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks.os.unlink"),
+    ):
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        assert "Opus transcription" in text
+        assert paths == []
+
+
+@pytest.mark.asyncio
+async def test_download_and_parse_media_image_unlinks_on_logger_exception():
+    """_download_and_parse_media removes image from paths and unlinks on logger error."""
+    from infrastructure.task_queue.tasks import _download_and_parse_media
+    import infrastructure.task_queue.tasks as _tasks_mod
+
+    logger = _tasks_mod.logger
+
+    mock_adapter = AsyncMock()
+    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_fail.jpg")
+    mock_adapter.aclose = AsyncMock()
+
+    real_logger_info = logger.info
+    call_count = 0
+
+    def _failing_logger_info(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if args and "Added image" in str(args[0]):
+            raise RuntimeError("Logger error")
+        return real_logger_info(*args, **kwargs)
+
+    with (
+        patch(
+            "infrastructure.task_queue.tasks._adapter_factory",
+            return_value=mock_adapter,
+        ),
+        patch.object(logger, "info", side_effect=_failing_logger_info),
+        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
+    ):
+        file_items = [{"file_id": "img1", "file_type": "image/jpeg"}]
+        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
+        assert paths == []
+        mock_unlink.assert_called_once_with("/tmp/img_fail.jpg")
+
+
+# ──────────────────────────────────────────────
+# T11: DI adapter factory tests
+# ──────────────────────────────────────────────
+
+
+def test_set_and_reset_adapter_factory():
+    """set_adapter_factory overrides, reset_adapter_factory restores default."""
+    from infrastructure.task_queue.tasks import (
+        set_adapter_factory,
+        reset_adapter_factory,
+        _default_create_adapter,
+    )
+
+    def custom(mt, tok):
+        return None
+
+    set_adapter_factory(custom)
+    from infrastructure.task_queue import tasks as tasks_mod
+
+    assert tasks_mod._adapter_factory is custom
+
+    reset_adapter_factory()
+    assert tasks_mod._adapter_factory is _default_create_adapter

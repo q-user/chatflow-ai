@@ -1,7 +1,7 @@
 FROM docker.io/library/python:3.14-slim
 
 # 1. Установка uv напрямую из официального образа (экономит время и место)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
 
 # Настройки для стабильной работы Python и uv
 ENV UV_SYSTEM_PYTHON=1 \

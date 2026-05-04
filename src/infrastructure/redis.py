@@ -1,3 +1,5 @@
+from threading import Lock as ThreadLock
+
 from redis.asyncio import ConnectionPool, Redis
 from typing import Optional
 
@@ -5,16 +7,21 @@ from infrastructure.config import settings
 
 _pool: Optional[ConnectionPool] = None
 _redis_client: Optional[Redis] = None
+_redis_init_lock = ThreadLock()
 
 
 def get_redis() -> Redis:
-    """Get the singleton Redis client with lazy initialization."""
+    """Get the singleton Redis client with lazy initialization (thread-safe)."""
     global _pool, _redis_client
     if _redis_client is None:
-        if not settings.redis_url:
-            raise RuntimeError("REDIS_URL is not configured in settings")
-        _pool = ConnectionPool.from_url(settings.redis_url, decode_responses=False)
-        _redis_client = Redis(connection_pool=_pool)
+        with _redis_init_lock:
+            if _redis_client is None:
+                if not settings.redis_url:
+                    raise RuntimeError("REDIS_URL is not configured in settings")
+                _pool = ConnectionPool.from_url(
+                    settings.redis_url, decode_responses=False
+                )
+                _redis_client = Redis(connection_pool=_pool)
     return _redis_client
 
 

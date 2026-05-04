@@ -31,4 +31,3 @@ celery_app.conf.update(
     enable_utc=True,
     include=["infrastructure.task_queue.tasks"],
 )
-

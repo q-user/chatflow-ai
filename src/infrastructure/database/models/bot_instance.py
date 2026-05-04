@@ -2,9 +2,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.types import JSON as GenericJSON
 
 from infrastructure.database.base import Base
 
@@ -25,7 +24,9 @@ class BotInstanceTable(Base):
     )
     messenger_type: Mapped[str] = mapped_column(String(10), nullable=False)  # TG / YM
     token: Mapped[str] = mapped_column(String(512), nullable=False)  # bot API token
-    secret: Mapped[str | None] = mapped_column(String(512), nullable=True)  # webhook secret (MAX)
+    secret: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )  # webhook secret (MAX)
     status: Mapped[str] = mapped_column(
         String(20), default="active"
     )  # active / inactive
@@ -33,12 +34,13 @@ class BotInstanceTable(Base):
         String(50), nullable=False, server_default="finance"
     )  # finance, estimator, hr, etc.
     config: Mapped[dict | None] = mapped_column(
-        GenericJSON, nullable=True
+        JSONB, nullable=True
     )  # {"system_prompt": "...", "output_format": "csv", ...}
 
     __table_args__ = (
         CheckConstraint(
-            "messenger_type IN ('TG', 'YM', 'MX')", name="ck_bot_instances_messenger_type"
+            "messenger_type IN ('TG', 'YM', 'MX')",
+            name="ck_bot_instances_messenger_type",
         ),
     )
 

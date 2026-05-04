@@ -78,9 +78,12 @@ class HookRouterService:
         messenger_type: str,
         bot_uuid: uuid.UUID,
         payload: dict[str, Any],
+        webhook_secret: str | None = None,
     ) -> tuple[int, str]:
         """Process an incoming webhook.
 
+        :param webhook_secret: Secret token from webhook request header.
+            MX: X-Max-Bot-Api-Secret, TG: X-Telegram-Bot-Api-Secret-Token.
         :returns: (status_code, message)
         """
         # 1. Lookup BotInstance
@@ -88,7 +91,17 @@ class HookRouterService:
         if bot is None:
             return 404, "Bot not found"
 
-        # 2. Validate messenger_type and status
+        # 2. Authenticate webhook by messenger type
+        if bot.secret:
+            if webhook_secret is None or webhook_secret != bot.secret:
+                logger.warning(
+                    "Webhook auth failed for %s bot %s",
+                    messenger_type,
+                    bot_uuid,
+                )
+                return 401, "Invalid webhook secret"
+
+        # 3. Validate messenger_type and status
         if bot.messenger_type != messenger_type:
             return 403, "Messenger type mismatch"
 
@@ -111,18 +124,19 @@ class HookRouterService:
                 return 400, "Invalid webhook payload"
 
             # 5. Inject real bot_instance_id (adapter uses placeholder)
-            # Use model_copy for immutability instead of direct mutation
             envelope = envelope.model_copy(
                 update={"bot_instance_id": uuid.UUID(str(bot.id))}
             )
 
             # 6. Resolve user
             user = await self._resolve_user(envelope, uuid.UUID(str(bot.company_id)))
+
+            # 7. OTP intercept — for unknown users, check OTP before dispatch
             if user is None:
                 await self._handle_unknown_user(envelope, bot, adapter)
                 return 200, "OK"
 
-            # 7. Dispatch to session FSM
+            # 8. Dispatch to session FSM
             await self._dispatch_to_session(envelope, user, bot, adapter)
             return 200, "OK"
         finally:

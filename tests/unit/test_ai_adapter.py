@@ -141,7 +141,7 @@ def test_strip_thinking_empty_after():
 
 
 def test_strip_thinking_unclosed():
-    """Unclosed think tag with no closing tag → empty string."""
+    """Unclosed think tag with no closing tag → strips from tag to end."""
     content = "<|think|>\n reasoning here\n# Header"
     result = OpenRouterAdapter._strip_thinking(content)
     assert result == ""
@@ -158,12 +158,8 @@ def test_strip_thinking_edge_cases():
     # 3. Content that starts with think_start_tag but has no content after
     assert OpenRouterAdapter._strip_thinking("<|think|>") == ""
 
-    # 4. Thinking tag but not at the start (and no closing tag)
-    # Current impl: if think_end_tag not in content AND not startswith(think_start_tag) -> return content
-    assert (
-        OpenRouterAdapter._strip_thinking("Hello <|think|> world")
-        == "Hello <|think|> world"
-    )
+    # 4. Thinking tag in the middle with no closing tag → strip from tag to end
+    assert OpenRouterAdapter._strip_thinking("Hello <|think|> world") == "Hello"
 
     # 5. Multiple closing tags
     assert (
@@ -209,7 +205,26 @@ async def test_generate_json_with_cot_stripped(adapter: OpenRouterAdapter):
 
 
 @pytest.mark.asyncio
-async def test_generate_json_invalid_json(adapter: OpenRouterAdapter):
+async def test_generate_json_strips_whitespace_after_thinking(
+    adapter: OpenRouterAdapter,
+):
+    """Whitespace after thinking block is stripped before JSON parse."""
+    mock_response = {
+        "choices": [
+            {
+                "message": {
+                    "content": '<|think|>reasoning</|think|>  \n\n {"key": "value"} \n'
+                }
+            }
+        ]
+    }
+
+    with patch.object(adapter, "_call_api", new_callable=AsyncMock) as mock_call:
+        mock_call.return_value = mock_response
+
+        result = await adapter.generate_json("system", "text")
+
+        assert result == {"key": "value"}
     """Non-JSON response → AIServiceError."""
     mock_response = {"choices": [{"message": {"content": "not valid json {{{"}}]}
 

@@ -78,6 +78,7 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
 
         content = self._strip_thinking(content)
         content = self._strip_markdown_fences(content)
+        content = content.strip()
 
         try:
             return json.loads(content)
@@ -203,13 +204,21 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
 
     @staticmethod
     def _strip_thinking(content: str) -> str:
-        """Remove Gemma 4 CoT thinking block from response."""
+        """Remove Gemma 4 CoT thinking block from response.
+
+        Handles:
+        - ``<|think|>...\\n``` → strip thinking, return rest
+        - ``<|think|>...`` (no closing tag) → strip from tag to end
+        - ``<|think|>`` at start with no closing tag → empty string
+        - Torn ``<|think|`` at end (incomplete tag) → leave as plain text
+        """
         think_end_tag = "</think>"
         think_start_tag = "<|think|>"
         if think_end_tag in content:
             return content.split(think_end_tag, 1)[-1].strip()
-        if content.strip().startswith(think_start_tag):
-            return ""
+        idx = content.find(think_start_tag)
+        if idx != -1:
+            return content[:idx].strip()
         return content
 
     @staticmethod

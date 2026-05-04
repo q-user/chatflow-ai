@@ -16,10 +16,25 @@ from typing import Any
 
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.database import session as db_session
-from infrastructure.messengers import create_adapter
+from infrastructure.messengers import create_adapter as _default_create_adapter
 from infrastructure.task_queue.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+_adapter_factory = _default_create_adapter
+
+
+def set_adapter_factory(factory) -> None:
+    """Override the adapter factory for testing or custom wiring."""
+    global _adapter_factory
+    _adapter_factory = factory
+
+
+def reset_adapter_factory() -> None:
+    """Reset the adapter factory to the default create_adapter."""
+    global _adapter_factory
+    _adapter_factory = _default_create_adapter
+
 
 # Fallback prompt for finance module when bot has no custom system_prompt
 FINANCE_FALLBACK_PROMPT = (
@@ -351,10 +366,13 @@ def _write_report_csv(
     filename = f"report_{date_from}_{date_to}_{uuid.uuid4().hex[:8]}.csv"
     filepath = os.path.join(output_dir, filename)
 
-    with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    try:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    except OSError as e:
+        raise RuntimeError(f"Failed to write report CSV to {filepath}: {e}") from e
 
     return filepath
 
@@ -363,7 +381,7 @@ def _send_text_message(
     bot_token: str, messenger_type: str, chat_id: str, text: str
 ) -> None:
     """Send a plain text message via messenger adapter (sync wrapper)."""
-    adapter = create_adapter(messenger_type, bot_token)
+    adapter = _adapter_factory(messenger_type, bot_token)
 
     async def _send() -> None:
         try:
@@ -517,7 +535,7 @@ async def _download_and_parse_media(
     from infrastructure.parsers import process_document
     # lazy STT init
 
-    adapter = create_adapter(messenger_type, bot_token)
+    adapter = _adapter_factory(messenger_type, bot_token)
     stt = None
     parsed_parts: list[str] = []
     image_paths: list[str] = []
@@ -540,6 +558,7 @@ async def _download_and_parse_media(
             )
 
             # Download
+            local_path: str | None = None
             try:
                 local_path = await adapter.download_file(file_id, dest)
                 file_size = (
@@ -552,6 +571,9 @@ async def _download_and_parse_media(
                 logger.warning(
                     "Failed to download file %s, skipping", file_id, exc_info=True
                 )
+                local_path = None
+
+            if local_path is None:
                 continue
 
             # Route by category
@@ -578,7 +600,10 @@ async def _download_and_parse_media(
                         if text:
                             parsed_parts.append(f"[Транскрипция аудио]:\n{text}")
                     finally:
-                        os.unlink(local_path)
+                        try:
+                            os.unlink(local_path)
+                        except OSError:
+                            pass
                 elif category == "document":
                     try:
                         if file_type:
@@ -588,10 +613,20 @@ async def _download_and_parse_media(
                         if text:
                             parsed_parts.append(f"[Содержимое документа]:\n{text}")
                     finally:
-                        os.unlink(local_path)
+                        try:
+                            os.unlink(local_path)
+                        except OSError:
+                            pass
                 else:
                     logger.warning("Unknown file category for %s, skipping", file_id)
             except Exception as exc:
+                if category == "image" and local_path in image_paths:
+                    image_paths.remove(local_path)
+                if category == "image":
+                    try:
+                        os.unlink(local_path)
+                    except OSError:
+                        pass
                 logger.warning(
                     "Failed to parse file %s (%s): %s",
                     file_id,
@@ -733,10 +768,13 @@ def _write_csv(data: dict, output_dir: str = "/tmp") -> str:
     filename = f"finance_{uuid.uuid4().hex[:8]}.csv"
     filepath = os.path.join(output_dir, filename)
 
-    with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    try:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    except OSError as e:
+        raise RuntimeError(f"Failed to write CSV to {filepath}: {e}") from e
 
     return filepath
 
@@ -760,7 +798,7 @@ def _deliver_artifact(snapshot: dict, artifact_path: str) -> None:
         return
 
     # Type guards: all() ensures these are not None
-    adapter = create_adapter(str(messenger_type), str(bot_token))
+    adapter = _adapter_factory(str(messenger_type), str(bot_token))
 
     async def _send() -> None:
         try:

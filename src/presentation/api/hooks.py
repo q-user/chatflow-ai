@@ -4,9 +4,10 @@ Single entry point: POST /api/v1/hooks/{messenger_type}/{bot_uuid}
 Routes to the correct adapter, parses payload, and dispatches to session FSM.
 """
 
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,8 @@ from infrastructure.services.hook_router import (
 from infrastructure.services.messenger_link import MessengerLinkService
 
 hooks_router = APIRouter(prefix="/api/v1/hooks", tags=["webhooks"])
+
+logger = logging.getLogger(__name__)
 
 
 async def get_redis_client() -> Redis:
@@ -81,39 +84,41 @@ async def handle_webhook(
     bot_uuid: uuid.UUID,
     payload: dict,
     x_max_bot_api_secret: str | None = Header(None),
+    x_telegram_bot_api_secret_token: str | None = Header(
+        None, alias="X-Telegram-Bot-Api-Secret-Token"
+    ),
     hook_service: HookRouterService = Depends(get_hook_router_service),
 ) -> dict[str, str]:
     """Dynamic webhook handler.
 
     Processing pipeline:
     1. Lookup BotInstance by bot_uuid
-    2. Validate messenger_type matches + status=active
-    3. Create adapter for this bot instance (lazy)
-    4. Parse payload via adapter → IncomingEnvelope
-    5. Inject bot_instance_id into envelope
-    6. Resolve user by messenger_user_id
-    7. If user not found → OTP-intercept logic
-    8. If user found → dispatch to SessionService
+    2. Authenticate webhook secret (MX, TG, or YM)
+    3. Validate messenger_type matches + status=active
+    4. Create adapter for this bot instance
+    5. Parse payload via adapter → IncomingEnvelope
+    6. Inject bot_instance_id into envelope
+    7. Resolve user by messenger_user_id
+    8. If user not found → OTP-intercept logic
+    9. If user found → dispatch to SessionService
 
-    Always returns 200 immediately (Telegram requires response within 60s).
+    For TG: always returns 200 (Telegram requires response within 60s).
+    For MX/YM: returns proper HTTP error codes on failure.
     """
-    # Verify MAX webhook secret if present
-    if messenger_type == "MX" and x_max_bot_api_secret is not None:
-        from infrastructure.database.models.bot_instance import BotInstanceTable
-        from infrastructure.database.session import get_db_session as get_sync_db
-        async for session in get_sync_db():
-            bot = await session.get(BotInstanceTable, bot_uuid)
-            if bot is None or bot.secret != x_max_bot_api_secret:
-                return {"status": "rejected"}
-            break
-
+    secret = x_max_bot_api_secret or x_telegram_bot_api_secret_token
     status_code, message = await hook_service.process_webhook(
-        messenger_type, bot_uuid, payload
+        messenger_type, bot_uuid, payload, secret
     )
 
     if status_code != 200:
-        # Log but still return 200 for Telegram compatibility
-        # In production, return proper status for non-Telegram messengers
-        pass
+        if messenger_type == "TG":
+            logger.warning(
+                "Webhook rejected for TG bot %s: %d %s",
+                bot_uuid,
+                status_code,
+                message,
+            )
+        else:
+            raise HTTPException(status_code=status_code, detail=message)
 
     return {"status": "ok"}

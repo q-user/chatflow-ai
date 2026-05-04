@@ -194,9 +194,7 @@ class YandexAdapter(BaseHttpAdapter, IMessengerAdapter):
         :raises httpx.HTTPStatusError: If API returns an error.
         """
         if caption:
-            logger.warning(
-                "Yandex send_file does not support caption — ignored"
-            )
+            logger.warning("Yandex send_file does not support caption — ignored")
 
         http = await self._get_http_client()
         url = f"{self.BASE_URL}/messages/sendFile/"
@@ -241,7 +239,9 @@ class YandexAdapter(BaseHttpAdapter, IMessengerAdapter):
         except httpx.RequestError as e:
             raise ValueError(f"Network error downloading file: {e}") from e
 
-    async def register_webhook(self, webhook_url: str, secret: str | None = None) -> None:
+    async def register_webhook(
+        self, webhook_url: str, secret: str | None = None
+    ) -> None:
         """Register a webhook URL via /self/update/.
 
         :param webhook_url: Full public URL for the webhook endpoint.
@@ -297,15 +297,19 @@ def _build_suggest_buttons(
         yandex_row = []
         for btn in row:
             payload = btn.get("payload", btn["text"])
-            yandex_row.append({
-                "id": btn["text"],
-                "title": btn["text"],
-                "directives": [{
-                    "type": "server_action",
-                    "name": btn["text"],
-                    "payload": payload,
-                }],
-            })
+            yandex_row.append(
+                {
+                    "id": btn["text"],
+                    "title": btn["text"],
+                    "directives": [
+                        {
+                            "type": "server_action",
+                            "name": btn["text"],
+                            "payload": payload,
+                        }
+                    ],
+                }
+            )
         rows.append(yandex_row)
 
     return {

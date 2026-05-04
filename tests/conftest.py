@@ -1,3 +1,4 @@
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
@@ -51,6 +52,9 @@ async def pg_test_db() -> AsyncGenerator[str, None]:
     Requires TEST_DATABASE_URL pointing to the 'postgres' maintenance DB.
     """
     db_name = f"test_{uuid.uuid4().hex[:12]}"
+
+    if not re.match(r"^[a-zA-Z0-9_]+$", db_name):
+        raise ValueError(f"Invalid database name: {db_name}")
 
     maintenance_url = TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
     engine = create_async_engine(maintenance_url, isolation_level="AUTOCOMMIT")

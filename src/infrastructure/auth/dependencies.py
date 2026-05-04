@@ -44,8 +44,6 @@ fastapi_users = FastAPIUsers[UserTable, uuid.UUID](
 # Пробует оба бэкенда: Bearer (API) и Cookie (Web Dashboard)
 current_active_user = fastapi_users.current_user(active=True)
 
-# Cookie-only — для Web Dashboard роутов
-# Note: fastapi-users не поддерживает auth_backend param в current_user,
-# поэтому current_active_user_cookie = current_active_user (проверка по обоим бэкендам).
-# Web-роуты дополнительно защищены тем, что кука httponly и браузер не отправит Bearer.
 current_active_user_cookie = current_active_user
+
+current_superuser = fastapi_users.current_user(active=True, superuser=True)

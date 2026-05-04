@@ -806,3 +806,59 @@ async def test_unknown_module_type_returns_error(
         "неизвест" in call_args[0][1].lower()
         or "администратор" in call_args[0][1].lower()
     )
+
+
+# ──────────────────────────────────────────────
+# T9: OTP intercept does not dispatch to session
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_otp_does_not_dispatch_to_session(
+    hook_router: HookRouterService,
+    test_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """OTP from unknown user → handles OTP but never dispatches to session."""
+    payload = {
+        "message": {
+            "chat": {"id": 111222333},
+            "from": {"id": 111222333},
+            "text": "123456",
+        }
+    }
+
+    with patch.object(hook_router, "_dispatch_to_session") as mock_dispatch:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(test_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    mock_dispatch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_known_user_otp_dispatches_to_session(
+    hook_router: HookRouterService,
+    test_bot_instance: BotInstanceTable,
+    mock_adapter,
+    db_session: AsyncSession,
+    test_company: CompanyTable,
+):
+    """OTP from known user → dispatches to session as regular message."""
+    telegram_id = f"otp_known_{_make_unique_id()}"
+    user = _make_user("otp_known_user", test_company.id, telegram_id)
+    db_session.add(user)
+    await db_session.flush()
+
+    payload = _tg_text_payload(telegram_id, "123456")
+
+    with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
+        status_code, _ = await hook_router.process_webhook(
+            "TG", uuid.UUID(str(test_bot_instance.id)), payload
+        )
+
+    assert status_code == 200
+    mock_celery.send_task.assert_called_once()

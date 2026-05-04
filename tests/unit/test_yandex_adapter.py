@@ -49,14 +49,16 @@ async def test_yandex_headers(yandex_adapter):
 async def test_parse_webhook_text_message(yandex_adapter):
     """parse_webhook extracts text message from Yandex update."""
     payload = {
-        "updates": [{
-            "from": {"id": "guid-1", "login": "user@yandex.ru"},
-            "chat": {"type": "private"},
-            "text": "Hello bot",
-            "message_id": 100,
-            "update_id": 1,
-            "timestamp": 1702323240,
-        }],
+        "updates": [
+            {
+                "from": {"id": "guid-1", "login": "user@yandex.ru"},
+                "chat": {"type": "private"},
+                "text": "Hello bot",
+                "message_id": 100,
+                "update_id": 1,
+                "timestamp": 1702323240,
+            }
+        ],
         "ok": True,
     }
     envelope = await yandex_adapter.parse_webhook(payload, "token")
@@ -72,14 +74,16 @@ async def test_parse_webhook_text_message(yandex_adapter):
 async def test_parse_webhook_group_chat(yandex_adapter):
     """parse_webhook uses chat.id for group chats."""
     payload = {
-        "updates": [{
-            "from": {"id": "guid-1", "login": "user@yandex.ru"},
-            "chat": {"type": "group", "id": "0/0/chat-guid"},
-            "text": "Group message",
-            "message_id": 101,
-            "update_id": 2,
-            "timestamp": 1702323240,
-        }],
+        "updates": [
+            {
+                "from": {"id": "guid-1", "login": "user@yandex.ru"},
+                "chat": {"type": "group", "id": "0/0/chat-guid"},
+                "text": "Group message",
+                "message_id": 101,
+                "update_id": 2,
+                "timestamp": 1702323240,
+            }
+        ],
         "ok": True,
     }
     envelope = await yandex_adapter.parse_webhook(payload, "token")
@@ -90,14 +94,16 @@ async def test_parse_webhook_group_chat(yandex_adapter):
 async def test_parse_webhook_file_attachment(yandex_adapter):
     """parse_webhook extracts file attachment."""
     payload = {
-        "updates": [{
-            "from": {"id": "guid-1", "login": "user@yandex.ru"},
-            "chat": {"type": "private"},
-            "file": {"id": "disk/file-guid", "name": "report.pdf", "size": 1024},
-            "message_id": 102,
-            "update_id": 3,
-            "timestamp": 1702323240,
-        }],
+        "updates": [
+            {
+                "from": {"id": "guid-1", "login": "user@yandex.ru"},
+                "chat": {"type": "private"},
+                "file": {"id": "disk/file-guid", "name": "report.pdf", "size": 1024},
+                "message_id": 102,
+                "update_id": 3,
+                "timestamp": 1702323240,
+            }
+        ],
         "ok": True,
     }
     envelope = await yandex_adapter.parse_webhook(payload, "token")
@@ -110,19 +116,28 @@ async def test_parse_webhook_file_attachment(yandex_adapter):
 async def test_parse_webhook_image(yandex_adapter):
     """parse_webhook extracts largest image variant."""
     payload = {
-        "updates": [{
-            "from": {"id": "guid-1", "login": "user@yandex.ru"},
-            "chat": {"type": "private"},
-            "images": [[
-                {"file_id": "disk/img?size=small", "width": 150, "height": 10},
-                {"file_id": "disk/img?size=middle", "width": 250, "height": 18},
-                {"file_id": "disk/img", "width": 1048, "height": 78,
-                 "size": 20362, "name": "photo.jpeg"},
-            ]],
-            "message_id": 103,
-            "update_id": 4,
-            "timestamp": 1702323240,
-        }],
+        "updates": [
+            {
+                "from": {"id": "guid-1", "login": "user@yandex.ru"},
+                "chat": {"type": "private"},
+                "images": [
+                    [
+                        {"file_id": "disk/img?size=small", "width": 150, "height": 10},
+                        {"file_id": "disk/img?size=middle", "width": 250, "height": 18},
+                        {
+                            "file_id": "disk/img",
+                            "width": 1048,
+                            "height": 78,
+                            "size": 20362,
+                            "name": "photo.jpeg",
+                        },
+                    ]
+                ],
+                "message_id": 103,
+                "update_id": 4,
+                "timestamp": 1702323240,
+            }
+        ],
         "ok": True,
     }
     envelope = await yandex_adapter.parse_webhook(payload, "token")
@@ -134,17 +149,19 @@ async def test_parse_webhook_image(yandex_adapter):
 async def test_parse_webhook_bot_request_callback(yandex_adapter):
     """parse_webhook handles bot_request (button press) as callback."""
     payload = {
-        "updates": [{
-            "from": {"id": "guid-1", "login": "user@yandex.ru"},
-            "chat": {"type": "private"},
-            "bot_request": {
-                "server_action": {"name": "action_name", "payload": "action_data"},
-                "element_id": "btn-1",
-            },
-            "message_id": 104,
-            "update_id": 5,
-            "timestamp": 1702323240,
-        }],
+        "updates": [
+            {
+                "from": {"id": "guid-1", "login": "user@yandex.ru"},
+                "chat": {"type": "private"},
+                "bot_request": {
+                    "server_action": {"name": "action_name", "payload": "action_data"},
+                    "element_id": "btn-1",
+                },
+                "message_id": 104,
+                "update_id": 5,
+                "timestamp": 1702323240,
+            }
+        ],
         "ok": True,
     }
     envelope = await yandex_adapter.parse_webhook(payload, "token")
@@ -164,13 +181,15 @@ async def test_parse_webhook_no_updates_raises(yandex_adapter):
 async def test_parse_webhook_no_sender_raises(yandex_adapter):
     """parse_webhook raises ValueError when no sender info."""
     payload = {
-        "updates": [{
-            "chat": {"type": "private"},
-            "text": "hi",
-            "message_id": 1,
-            "update_id": 1,
-            "timestamp": 1,
-        }],
+        "updates": [
+            {
+                "chat": {"type": "private"},
+                "text": "hi",
+                "message_id": 1,
+                "update_id": 1,
+                "timestamp": 1,
+            }
+        ],
         "ok": True,
     }
     with pytest.raises(ValueError, match="No sender"):
@@ -245,7 +264,10 @@ async def test_send_file(tmp_path, yandex_adapter):
     await yandex_adapter.send_file(chat_id="123", file_path=str(test_file))
 
     call_args = mock_client.post.call_args
-    assert call_args[0][0] == "https://botapi.messenger.yandex.net/bot/v1/messages/sendFile/"
+    assert (
+        call_args[0][0]
+        == "https://botapi.messenger.yandex.net/bot/v1/messages/sendFile/"
+    )
     assert "files" in call_args[1]
     assert "data" in call_args[1]
     assert call_args[1]["data"]["chat_id"] == "123"
@@ -283,7 +305,10 @@ async def test_download_file(tmp_path, yandex_adapter):
     assert result == str(dest)
     assert dest.read_bytes() == b"file-content-bytes"
     call_args = mock_client.post.call_args
-    assert call_args[0][0] == "https://botapi.messenger.yandex.net/bot/v1/messages/getFile/"
+    assert (
+        call_args[0][0]
+        == "https://botapi.messenger.yandex.net/bot/v1/messages/getFile/"
+    )
     assert call_args[1]["data"]["file_id"] == "disk/file-guid"
 
 

@@ -303,9 +303,7 @@ async def test_download_file(tmp_path, max_adapter):
     max_adapter._http = mock_client
 
     dest = tmp_path / "downloaded.txt"
-    result = await max_adapter.download_file(
-        "https://cdn.max.ru/files/abc", str(dest)
-    )
+    result = await max_adapter.download_file("https://cdn.max.ru/files/abc", str(dest))
 
     assert result == str(dest)
     assert dest.read_bytes() == b"file-bytes"
@@ -333,9 +331,7 @@ async def test_download_file_network_error(max_adapter):
 async def test_register_webhook_success(max_adapter):
     """Verify register_webhook posts to /subscriptions."""
     mock_client = AsyncMock(spec=AsyncClient)
-    mock_client.post.return_value = _mock_response(
-        json_data={"success": True}
-    )
+    mock_client.post.return_value = _mock_response(json_data={"success": True})
     max_adapter._http = mock_client
 
     await max_adapter.register_webhook("https://example.com/hook")
@@ -352,9 +348,7 @@ async def test_register_webhook_success(max_adapter):
 async def test_register_webhook_with_secret(max_adapter):
     """Verify register_webhook includes secret in body when provided."""
     mock_client = AsyncMock(spec=AsyncClient)
-    mock_client.post.return_value = _mock_response(
-        json_data={"success": True}
-    )
+    mock_client.post.return_value = _mock_response(json_data={"success": True})
     max_adapter._http = mock_client
 
     await max_adapter.register_webhook("https://example.com/hook", secret="my-secret")
@@ -368,9 +362,7 @@ async def test_register_webhook_with_secret(max_adapter):
 async def test_register_webhook_without_secret(max_adapter):
     """Verify register_webhook omits secret when not provided."""
     mock_client = AsyncMock(spec=AsyncClient)
-    mock_client.post.return_value = _mock_response(
-        json_data={"success": True}
-    )
+    mock_client.post.return_value = _mock_response(json_data={"success": True})
     max_adapter._http = mock_client
 
     await max_adapter.register_webhook("https://example.com/hook")

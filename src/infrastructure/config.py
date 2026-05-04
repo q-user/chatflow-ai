@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for all supported module types.
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "ChatFlow AI"
     environment: str = "development"
     debug: bool = False
-    domain: str = "localhost"
+    domain: str = "194.87.69.220.nip.io"
 
     database_url: str = ""
     database_sync_url: str = ""
@@ -46,12 +47,31 @@ class Settings(BaseSettings):
     riva_server_url: str = "dns:///grpc.nvcf.nvidia.com:443"
     riva_function_id: str = "b0e8b4a5-217c-40b7-9b96-17d84e666317"
 
+    # MAX Bot (seeded via Alembic data migration)
+    mx_bot_token: str = ""
+    mx_bot_secret: str = ""
+
     # Sentry
     sentry_dsn: str = ""
     sentry_traces_sample_rate: float = 0.1
     sentry_profiles_sample_rate: float = 0.1
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def _validate_required_fields(self) -> "Settings":
+        required = {
+            "database_url": self.database_url,
+            "redis_url": self.redis_url,
+            "secret_key": self.secret_key,
+        }
+        missing = [k for k, v in required.items() if not v]
+        if missing and self.environment != "test":
+            raise ValueError(
+                f"Required settings are empty: {', '.join(missing)}. "
+                "Set them in .env or environment variables."
+            )
+        return self
 
 
 # Создаем синглтон настроек

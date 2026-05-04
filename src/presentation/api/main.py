@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 import sentry_sdk
@@ -7,6 +7,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 
 from infrastructure.config import settings
+from infrastructure.auth import current_superuser
 from infrastructure.database.session import lifespan_db
 from presentation.api.auth import (
     auth_router,
@@ -51,7 +52,12 @@ async def unauthorized_handler(request: Request, exc):
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(auth_router_cookie, prefix="/auth/cookie", tags=["auth-cookie"])
 app.include_router(register_router, prefix="/auth", tags=["auth"])
-app.include_router(users_router, prefix="/users", tags=["users"])
+app.include_router(
+    users_router,
+    prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(current_superuser)],
+)
 
 # Include OTP routers
 app.include_router(otp_web_router, prefix="/auth", tags=["otp"])

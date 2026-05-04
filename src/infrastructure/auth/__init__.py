@@ -4,6 +4,7 @@ from infrastructure.auth.dependencies import (  # noqa: F401
     UserUpdateSchema,
     current_active_user,
     current_active_user_cookie,
+    current_superuser,
     fastapi_users,
 )
 from infrastructure.auth.manager import UserManager  # noqa: F401
@@ -15,6 +16,7 @@ __all__ = [
     "fastapi_users",
     "current_active_user",
     "current_active_user_cookie",
+    "current_superuser",
     "UserManager",
     "UserCreate",
     "UserRead",

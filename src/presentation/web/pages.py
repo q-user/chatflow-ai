@@ -86,7 +86,9 @@ async def dashboard_page(
     :param session: DB session for querying bots.
     """
     result = await session.execute(
-        select(BotInstanceTable).where(BotInstanceTable.company_id == user.company_id)
+        select(BotInstanceTable)
+        .where(BotInstanceTable.company_id == user.company_id)
+        .limit(100)
     )
     bots = result.scalars().all()
 
@@ -201,7 +203,9 @@ async def create_bot(
 
     # Re-query all bots for the company
     result = await session.execute(
-        select(BotInstanceTable).where(BotInstanceTable.company_id == user.company_id)
+        select(BotInstanceTable)
+        .where(BotInstanceTable.company_id == user.company_id)
+        .limit(100)
     )
     bots = result.scalars().all()
 
@@ -235,7 +239,9 @@ async def toggle_bot(
 
     # Re-query all bots
     result = await session.execute(
-        select(BotInstanceTable).where(BotInstanceTable.company_id == user.company_id)
+        select(BotInstanceTable)
+        .where(BotInstanceTable.company_id == user.company_id)
+        .limit(100)
     )
     bots = result.scalars().all()
 
