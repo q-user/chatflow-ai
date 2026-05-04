@@ -37,6 +37,7 @@ jobs:
         run: uv run ty check src/
       - name: Run Tests
         env:
+          ENVIRONMENT: test
           TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/chatflow_test_db
           REDIS_URL: redis://localhost:6379/0
         run: uv run pytest --cov --cov-fail-under=80
