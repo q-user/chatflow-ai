@@ -212,7 +212,7 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         - ``<|think|>`` at start with no closing tag → empty string
         - Torn ``<|think|`` at end (incomplete tag) → leave as plain text
         """
-        think_end_tag = "</think>"
+        think_end_tag = "</|think|>"
         think_start_tag = "<|think|>"
         if think_end_tag in content:
             return content.split(think_end_tag, 1)[-1].strip()
