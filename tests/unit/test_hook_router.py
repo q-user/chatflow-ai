@@ -842,7 +842,7 @@ async def test_otp_does_not_dispatch_to_session(
 @pytest.mark.asyncio
 async def test_known_user_otp_dispatches_to_session(
     hook_router: HookRouterService,
-    test_bot_instance: BotInstanceTable,
+    finance_bot_instance: BotInstanceTable,
     mock_adapter,
     db_session: AsyncSession,
     test_company: CompanyTable,
@@ -857,7 +857,7 @@ async def test_known_user_otp_dispatches_to_session(
 
     with patch("infrastructure.services.hook_router.celery_app") as mock_celery:
         status_code, _ = await hook_router.process_webhook(
-            "TG", uuid.UUID(str(test_bot_instance.id)), payload
+            "TG", uuid.UUID(str(finance_bot_instance.id)), payload
         )
 
     assert status_code == 200

@@ -225,6 +225,10 @@ async def test_generate_json_strips_whitespace_after_thinking(
         result = await adapter.generate_json("system", "text")
 
         assert result == {"key": "value"}
+
+
+@pytest.mark.asyncio
+async def test_generate_json_raises_on_invalid_json(adapter: OpenRouterAdapter):
     """Non-JSON response → AIServiceError."""
     mock_response = {"choices": [{"message": {"content": "not valid json {{{"}}]}
 

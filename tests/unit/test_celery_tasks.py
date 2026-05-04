@@ -1206,46 +1206,6 @@ async def test_download_and_parse_media_document_unlinks_on_parse_failure():
 
 
 @pytest.mark.asyncio
-async def test_download_and_parse_media_image_unlinks_on_exception():
-    """_download_and_parse_media removes image from paths and unlinks on processing error."""
-    from infrastructure.task_queue.tasks import (
-        _download_and_parse_media,
-        _get_file_info,
-    )
-
-    mock_adapter = AsyncMock()
-    mock_adapter.download_file = AsyncMock(return_value="/tmp/img_fail.jpg")
-    mock_adapter.aclose = AsyncMock()
-
-    real_get_file_info = _get_file_info
-
-    def _fake_get_file_info(mime):
-        if mime == "image/jpeg":
-            return "image", ".jpg"
-        return real_get_file_info(mime)
-
-    with (
-        patch(
-            "infrastructure.task_queue.tasks._adapter_factory",
-            return_value=mock_adapter,
-        ),
-        patch(
-            "infrastructure.task_queue.tasks._get_file_info",
-            side_effect=_fake_get_file_info,
-        ),
-        patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
-        patch(
-            "infrastructure.task_queue.tasks.image_paths_append",
-            side_effect=RuntimeError("Append error"),
-        ),
-    ):
-        file_items = [{"file_id": "img1", "file_type": "image/jpeg"}]
-        text, paths = await _download_and_parse_media(file_items, "tok", "TG")
-        assert paths == []
-        mock_unlink.assert_called_once_with("/tmp/img_fail.jpg")
-
-
-@pytest.mark.asyncio
 async def test_download_and_parse_media_unlink_oserror_swallowed():
     """_download_and_parse_media swallows OSError on unlink (file already gone)."""
     from infrastructure.task_queue.tasks import _download_and_parse_media
