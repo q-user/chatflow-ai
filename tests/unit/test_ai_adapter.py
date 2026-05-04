@@ -121,7 +121,7 @@ def test_extract_content_empty_choices():
 
 def test_strip_thinking_with_cot():
     """Content with CoT thinking → thinking block removed."""
-    content = " reasoning here</think> answer"
+    content = " reasoning here</|think|> answer"
     result = OpenRouterAdapter._strip_thinking(content)
     assert result == "answer"
 
@@ -150,7 +150,7 @@ def test_strip_thinking_unclosed():
 def test_strip_thinking_edge_cases():
     """Various edge cases for strip_thinking."""
     # 1. Think end tag at the start
-    assert OpenRouterAdapter._strip_thinking("</think> Answer") == "Answer"
+    assert OpenRouterAdapter._strip_thinking("</|think|> Answer") == "Answer"
 
     # 2. Empty content
     assert OpenRouterAdapter._strip_thinking("") == ""
@@ -163,8 +163,8 @@ def test_strip_thinking_edge_cases():
 
     # 5. Multiple closing tags
     assert (
-        OpenRouterAdapter._strip_thinking("r1</think> a1 </think> a2")
-        == "a1 </think> a2"
+        OpenRouterAdapter._strip_thinking("r1</|think|> a1 </|think|> a2")
+        == "a1 </|think|> a2"
     )
 
 
@@ -193,7 +193,7 @@ async def test_generate_json_valid(adapter: OpenRouterAdapter):
 async def test_generate_json_with_cot_stripped(adapter: OpenRouterAdapter):
     """CoT thinking block stripped before JSON parsing."""
     mock_response = {
-        "choices": [{"message": {"content": ' reasoning</think> {"key": "value"}'}}]
+        "choices": [{"message": {"content": ' reasoning</|think|> {"key": "value"}'}}]
     }
 
     with patch.object(adapter, "_call_api", new_callable=AsyncMock) as mock_call:
