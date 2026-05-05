@@ -36,6 +36,7 @@ dev = [
     "pytest-cov>=6.1.1",
     "pytest-httpx>=0.36.2",
     "pytest-xdist>=3.6.0",
+    "pytest-dotenv>=0.3.0",
     "ruff>=0.15.8",
     "ty>=0.0.26",
 ]
@@ -45,6 +46,7 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-n auto --dist=load"
+dotenv_files = [".env"]
 
 [tool.ruff]
 # Указываем ruff, что корни исходников в src
