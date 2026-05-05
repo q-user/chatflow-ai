@@ -38,12 +38,19 @@
   </div>
 
   <div>
-    <label class="block text-sm font-medium text-gray-700">AI Модель</label>
-    <select name="ai_provider" required
+    <label class="block text-sm font-medium text-gray-700">AI Provider</label>
+    <select name="ai_provider" id="ai_provider" required
             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
       {% for key, provider in ai_providers.items() %}
       <option value="{{ key }}">{{ provider.label }}</option>
       {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-gray-700">AI Model</label>
+    <select name="ai_model" id="ai_model" required
+            class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
     </select>
   </div>
 
@@ -54,6 +61,27 @@
 </form>
 
 <script>
+  (function() {
+    var providers = {{ ai_providers | tojson }};
+    var providerSel = document.getElementById('ai_provider');
+    var modelSel = document.getElementById('ai_model');
+
+    function updateModels() {
+      var pid = providerSel.value;
+      var models = providers[pid] ? providers[pid].models : [];
+      modelSel.innerHTML = '';
+      models.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        modelSel.appendChild(opt);
+      });
+    }
+
+    providerSel.addEventListener('change', updateModels);
+    updateModels();
+  })();
+
   document.querySelector('#bot-form-container form')
     .addEventListener('htmx:afterRequest', function(event) {
       if (event.detail.successful) {

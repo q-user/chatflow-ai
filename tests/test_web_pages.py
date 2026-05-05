@@ -82,7 +82,8 @@ async def test_create_bot_success(auth_client: AsyncClient):
             "token": "test_token_123",
             "messenger_type": "TG",
             "module_type": "finance",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 200
@@ -107,7 +108,8 @@ async def test_create_bot_invalid_field(
         "token": "test_token",
         "messenger_type": "TG",
         "module_type": "finance",
-        "ai_provider": "google_gemini_flash",
+        "ai_provider": "google",
+        "ai_model": "gemini-3-flash-preview",
     }
     data[field] = value
     resp = await auth_client.post("/bots", data=data)
@@ -131,7 +133,8 @@ async def test_create_bot_webhook_failure_returns_400(
             "token": "bad_token",
             "messenger_type": "TG",
             "module_type": "finance",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 400
@@ -155,7 +158,8 @@ async def test_create_bot_unsupported_messenger_returns_400(
             "token": "some_token",
             "messenger_type": "WA",
             "module_type": "finance",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 400
@@ -184,7 +188,8 @@ async def test_create_bot_aclose_called_on_webhook_failure(
             "token": "fail_token",
             "messenger_type": "TG",
             "module_type": "finance",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
 
@@ -211,7 +216,8 @@ async def test_toggle_bot_cycle(
             "token": token,
             "messenger_type": messenger,
             "module_type": module,
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 200
@@ -303,7 +309,8 @@ async def test_dashboard_shows_bot_table(auth_client: AsyncClient, db_session):
             "token": "dashboard_test_token",
             "messenger_type": "TG",
             "module_type": "estimator",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 200
@@ -384,7 +391,8 @@ async def test_create_bot_restricted_company_returns_400(
             "token": "restricted_bot_token",
             "messenger_type": "TG",
             "module_type": "hr",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 400
@@ -413,7 +421,8 @@ async def test_create_bot_superuser_bypass(client: AsyncClient, db_session):
             "token": "super_bot_token",
             "messenger_type": "TG",
             "module_type": "hr",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 200
@@ -473,7 +482,8 @@ async def test_empty_allowed_modules_form_empty(client: AsyncClient, db_session)
             "token": "no_module_token",
             "messenger_type": "TG",
             "module_type": "finance",
-            "ai_provider": "google_gemini_flash",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
         },
     )
     assert resp.status_code == 403

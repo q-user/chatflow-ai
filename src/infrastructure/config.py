@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     # SOCKS5 proxy for Telegram adapter only (MX/Yandex/AI/STT go direct)
     telegram_proxy: str | None = None
 
-    # Google Gemini (default AI provider)
+    # AI Provider API keys (used by AI_PROVIDERS registry)
     google_api_key: str = ""
+    ai_api_key: str = ""  # OpenRouter / generic fallback
 
     # Default timeout for AI adapters (fallback when provider config has no override)
     ai_timeout: float = 600.0  # NVIDIA free tier can take up to 10 min

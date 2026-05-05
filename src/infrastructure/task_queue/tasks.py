@@ -457,10 +457,10 @@ def _finance_module_handler(
         item for item in items if item.get("file_id") and item.get("file_type")
     ]
 
-    # 4. Resolve AI provider from bot config
-    provider_id: str | None = (
-        (module_config or {}).get("llm_routing", {}).get("provider")
-    )
+    # 4. Resolve AI provider and model from bot config
+    llm_routing = (module_config or {}).get("llm_routing", {})
+    provider_id: str | None = llm_routing.get("provider")
+    model_id: str | None = llm_routing.get("model")
 
     # 5. Single event loop: download + parse media + call AI
     result_json = asyncio.run(
@@ -471,6 +471,7 @@ def _finance_module_handler(
             bot_token,
             messenger_type,
             provider_id=provider_id,
+            model_id=model_id,
         )
     )
 
@@ -663,6 +664,7 @@ async def _finance_ai_pipeline(
     bot_token: str | None,
     messenger_type: str | None,
     provider_id: str | None = None,
+    model_id: str | None = None,
 ) -> dict:
     """Single async pipeline: download + parse media + call AI."""
     image_paths: list[str] | None = None
@@ -693,7 +695,11 @@ async def _finance_ai_pipeline(
 
     try:
         return await _ai_generate_json(
-            system_prompt, full_text, image_paths=image_paths, provider_id=provider_id
+            system_prompt,
+            full_text,
+            image_paths=image_paths,
+            provider_id=provider_id,
+            model_id=model_id,
         )
     finally:
         if image_paths:
@@ -751,11 +757,12 @@ async def _ai_generate_json(
     text: str,
     image_paths: list[str] | None = None,
     provider_id: str | None = None,
+    model_id: str | None = None,
 ) -> dict:
     """Async wrapper with proper resource cleanup."""
     from infrastructure.ai import create_ai_adapter
 
-    ai = create_ai_adapter(provider_id=provider_id)
+    ai = create_ai_adapter(provider_id=provider_id, model_id=model_id)
     try:
         return await ai.generate_json(
             system_prompt=system_prompt, text=text, image_paths=image_paths

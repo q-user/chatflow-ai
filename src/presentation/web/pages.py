@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from infrastructure.auth import current_active_user_cookie
 from infrastructure.config import ALL_MODULE_TYPES, settings
-from infrastructure.ai.registry import SUPPORTED_AI_PROVIDERS
+from infrastructure.ai.registry import AI_PROVIDERS
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
@@ -131,7 +131,7 @@ async def bot_add_form(
         "partials/bot_form.html",
         {
             "available_modules": available_modules,
-            "ai_providers": SUPPORTED_AI_PROVIDERS,
+            "ai_providers": AI_PROVIDERS,
         },
     )
 
@@ -144,6 +144,7 @@ async def create_bot(
     module_type: str = Form(...),
     secret: str | None = Form(default=None),
     ai_provider: str = Form(...),
+    ai_model: str = Form(...),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
@@ -168,8 +169,12 @@ async def create_bot(
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
 
-    if ai_provider not in SUPPORTED_AI_PROVIDERS:
+    if ai_provider not in AI_PROVIDERS:
         raise HTTPException(400, f"Invalid ai_provider: {ai_provider}")
+
+    valid_models = {m["id"] for m in AI_PROVIDERS[ai_provider]["models"]}
+    if ai_model not in valid_models:
+        raise HTTPException(400, f"Invalid ai_model: {ai_model}")
 
     # Normalize empty secret to None (HTML form sends "" for empty fields)
     if secret is not None and not secret.strip():
@@ -204,7 +209,7 @@ async def create_bot(
         module_type=module_type,
         status="active",
         secret=secret,
-        config={"llm_routing": {"provider": ai_provider}},
+        config={"llm_routing": {"provider": ai_provider, "model": ai_model}},
     )
     session.add(bot)
     await session.commit()

@@ -152,6 +152,7 @@ def test_compile_session_finance_module():
         txt: str,
         image_paths: list[str] | None = None,
         provider_id: str | None = None,
+        model_id: str | None = None,
     ) -> dict:
         return {
             "rows": [
