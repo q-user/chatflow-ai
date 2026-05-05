@@ -354,12 +354,14 @@ async def edit_bot(
         finally:
             await adapter.aclose()
 
-    # Apply updates
+    # Apply updates (merge to preserve other config keys like system_prompt)
     bot.token = token
     bot.messenger_type = messenger_type
     bot.module_type = module_type
     bot.secret = secret
-    bot.config = {"llm_routing": {"provider": ai_provider, "model": ai_model}}
+    config = dict(bot.config or {})
+    config["llm_routing"] = {"provider": ai_provider, "model": ai_model}
+    bot.config = config
 
     await session.commit()
     await session.refresh(bot)

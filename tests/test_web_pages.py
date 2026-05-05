@@ -828,3 +828,373 @@ async def test_bot_row_endpoint(auth_client: AsyncClient, db_session):
     assert "row_test_token" not in resp.text  # row doesn't show token
     assert "TG" in resp.text
     assert "finance" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_bot_invalid_ai_provider(auth_client: AsyncClient):
+    """POST /bots with invalid ai_provider returns 400."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "test_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "invalid_provider",
+            "ai_model": "some-model",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid ai_provider" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_bot_invalid_ai_model(auth_client: AsyncClient):
+    """POST /bots with ai_model not in provider returns 400."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "test_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "invalid-model",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid ai_model" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
+    """POST /bots with messenger_type=MX and no secret auto-generates secret."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "mx_test_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            # secret omitted
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "mx_test_token")
+    )
+    bot = result.scalar_one()
+    assert bot.secret is not None
+    assert len(bot.secret) == 32  # uuid4().hex
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_invalid_messenger_type(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with invalid messenger_type returns 400."""
+    # Create bot via HTTP to get correct company_id
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_messenger_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_messenger_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_messenger_token",
+            "messenger_type": "INVALID",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid messenger_type" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_invalid_module_type(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with module_type not in allowed_modules returns 400."""
+    # Create bot via HTTP to get correct company_id
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_module_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_module_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_module_token",
+            "messenger_type": "TG",
+            "module_type": "invalid_module",  # definitely not in allowed_modules
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid module_type" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_invalid_ai_model(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with ai_model not in provider returns 400."""
+    # Create bot via HTTP to get correct company_id
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_model_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_model_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_model_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "invalid-model",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid ai_model" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_post_not_found(auth_client: AsyncClient):
+    """POST /bots/{id}/edit for non-existent bot returns 404."""
+    from uuid import uuid4
+
+    fake_id = uuid4()
+    resp = await auth_client.post(
+        f"/bots/{fake_id}/edit",
+        data={
+            "token": "test_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_config_merge_preserves_system_prompt(
+    auth_client: AsyncClient, db_session
+):
+    """POST /bots/{id}/edit preserves other config keys like system_prompt."""
+    # Create bot via HTTP to get correct company_id
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_merge_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    # Inject system_prompt into config directly
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_merge_token")
+    )
+    bot = result.scalar_one()
+    bot.config = {
+        "system_prompt": "Custom prompt",
+        "llm_routing": {"provider": "google", "model": "gemini-3-flash-preview"},
+    }
+    await db_session.commit()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_merge_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "nvidia",
+            "ai_model": "moonshotai/kimi-k2.6",
+        },
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.config is not None
+    assert bot.config.get("system_prompt") == "Custom prompt"
+    assert bot.config.get("llm_routing") == {
+        "provider": "nvidia",
+        "model": "moonshotai/kimi-k2.6",
+    }
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_row_not_found(auth_client: AsyncClient):
+    """GET /bots/{id}/row for non-existent bot returns 404."""
+    from uuid import uuid4
+
+    fake_id = uuid4()
+    resp = await auth_client.get(f"/bots/{fake_id}/row")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_empty_secret_normalized(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with whitespace-only secret normalizes to None."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_secret_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_secret_token")
+    )
+    bot = result.scalar_one()
+
+    # Send whitespace-only secret → should be treated as None (no re-register needed)
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_secret_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            "secret": "   ",
+        },
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit switching to MX auto-generates secret if empty."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_token")
+    )
+    bot = result.scalar_one()
+    assert bot.secret is None  # TG bot has no secret
+
+    # Switch to MX without secret
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.secret is not None
+    assert len(bot.secret) == 32
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_webhook_value_error(
+    auth_client: AsyncClient, db_session, monkeypatch
+):
+    """POST /bots/{id}/edit with token change but webhook raises ValueError → 400."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_webhook_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_webhook_token")
+    )
+    bot = result.scalar_one()
+
+    # Force adapter.register_webhook to raise ValueError
+    from infrastructure.services.hook_router import get_adapter_factory
+    from unittest.mock import AsyncMock
+
+    failing_adapter = AsyncMock()
+    failing_adapter.register_webhook = AsyncMock(side_effect=ValueError("bad webhook"))
+    failing_adapter.aclose = AsyncMock()
+
+    def failing_factory(messenger_type: str, token: str):
+        return failing_adapter
+
+    # Patch the factory in app dependency overrides
+    app = auth_client._transport.app
+    app.dependency_overrides[get_adapter_factory] = lambda: failing_factory
+
+    try:
+        resp = await auth_client.post(
+            f"/bots/{bot.id}/edit",
+            data={
+                "token": "edit_webhook_token_changed",
+                "messenger_type": "TG",
+                "module_type": "finance",
+                "ai_provider": "google",
+                "ai_model": "gemini-3-flash-preview",
+            },
+        )
+        assert resp.status_code == 400
+        assert "Webhook registration failed" in resp.text
+    finally:
+        app.dependency_overrides.pop(get_adapter_factory, None)

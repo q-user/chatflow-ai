@@ -79,7 +79,7 @@
     var providers = {{ ai_providers | tojson }};
     var providerSel = document.getElementById('edit_ai_provider_{{ bot.id }}');
     var modelSel = document.getElementById('edit_ai_model_{{ bot.id }}');
-    var currentModel = '{{ current_model }}';
+    var currentModel = {{ current_model | tojson }};
 
     function updateModels() {
       var pid = providerSel.value;
