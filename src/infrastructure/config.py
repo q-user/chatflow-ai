@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # AI Provider API keys (used by AI_PROVIDERS registry)
     google_api_key: str = ""
-    ai_api_key: str = ""  # OpenRouter / generic fallback
+    openrouter_api_key: str = ""
 
     # Default timeout for AI adapters (fallback when provider config has no override)
     ai_timeout: float = 600.0  # NVIDIA free tier can take up to 10 min
