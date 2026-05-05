@@ -294,17 +294,15 @@ async def test_call_api_exceptions(adapter: OpenRouterAdapter, side_effect, matc
 
 
 def test_create_ai_adapter(monkeypatch):
-    """create_ai_adapter returns OpenRouterAdapter with settings."""
+    """create_ai_adapter returns OpenRouterAdapter with registry settings."""
     from infrastructure.ai import create_ai_adapter
 
-    monkeypatch.setattr("infrastructure.config.settings.ai_api_key", "test_key")
-    monkeypatch.setattr(
-        "infrastructure.config.settings.ai_base_url", "https://test.api"
-    )
-    monkeypatch.setattr("infrastructure.config.settings.ai_model_name", "test_model")
+    monkeypatch.setattr("infrastructure.config.settings.google_api_key", "test_key")
 
-    adapter = create_ai_adapter()
+    adapter = create_ai_adapter("google_gemini_flash")
     assert isinstance(adapter, OpenRouterAdapter)
     assert adapter._api_key == "test_key"
-    assert adapter._base_url == "https://test.api"
-    assert adapter._model == "test_model"
+    assert (
+        adapter._base_url == "https://generativelanguage.googleapis.com/v1beta/openai"
+    )
+    assert adapter._model == "gemini-1.5-flash"

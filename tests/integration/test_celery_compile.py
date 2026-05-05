@@ -148,7 +148,10 @@ def test_compile_session_finance_module():
     import infrastructure.task_queue.tasks as tasks_module
 
     async def _fake_ai_generate(
-        sp: str, txt: str, image_paths: list[str] | None = None
+        sp: str,
+        txt: str,
+        image_paths: list[str] | None = None,
+        provider_id: str | None = None,
     ) -> dict:
         return {
             "rows": [
