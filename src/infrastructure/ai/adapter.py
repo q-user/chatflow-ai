@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 GEMMA4_DEFAULT_PARAMS = {
     "temperature": 1.0,
     "top_p": 0.95,
-    "top_k": 64,
 }
 
 # CoT token for Gemma 4 thinking mode
@@ -35,7 +34,7 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
     """OpenAI-compatible adapter optimized for Gemma 4 via OpenRouter.
 
     Key Gemma 4 specifics:
-    1. temperature=1.0, top_p=0.95, top_k=64
+    1. temperature=1.0, top_p=0.95
     2. Images MUST precede text in content array
     3. System prompt prefixed with <|think|> for Chain-of-Thought
     4. response_format: json_object when available
