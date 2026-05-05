@@ -305,4 +305,4 @@ def test_create_ai_adapter(monkeypatch):
     assert (
         adapter._base_url == "https://generativelanguage.googleapis.com/v1beta/openai"
     )
-    assert adapter._model == "gemini-1.5-flash"
+    assert adapter._model == "gemini-3-flash-preview"

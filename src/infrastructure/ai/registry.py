@@ -11,7 +11,7 @@ Each preset declares:
 SUPPORTED_AI_PROVIDERS: dict[str, dict] = {
     "google_gemini_flash": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-1.5-flash",
+        "model": "gemini-3-flash-preview",
         "key_env": "google_api_key",
         "vision": True,
         "label": "Gemini 1.5 Flash (Vision+Text)",
