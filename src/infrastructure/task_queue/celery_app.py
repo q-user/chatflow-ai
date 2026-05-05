@@ -30,6 +30,7 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     include=["infrastructure.task_queue.tasks"],
+    result_expires=3600,  # 1 hour — prevent Redis memory leak from stale results
     task_soft_time_limit=300,  # 5 min soft limit (raises SoftTimeLimitExceeded)
     task_time_limit=600,  # 10 min hard limit (SIGKILL)
 )

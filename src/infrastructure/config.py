@@ -28,10 +28,10 @@ class Settings(BaseSettings):
     # SOCKS5 proxy for Telegram adapter only (MX/Yandex/AI/STT go direct)
     telegram_proxy: str | None = None
 
-    # AI Provider (OpenAI-compatible API format)
-    ai_api_key: str = ""  # OpenRouter / NVIDIA / Google AI Studio key
-    ai_base_url: str = "https://openrouter.ai/api/v1"
-    ai_model_name: str = "google/gemma-4-26b-a4b-it"  # default model
+    # Google Gemini (default AI provider)
+    google_api_key: str = ""
+
+    # Default timeout for AI adapters (fallback when provider config has no override)
     ai_timeout: float = 600.0  # NVIDIA free tier can take up to 10 min
 
     # STT Provider selection: "groq" or "riva"

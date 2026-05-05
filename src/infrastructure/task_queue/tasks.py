@@ -28,12 +28,18 @@ def set_adapter_factory(factory) -> None:
     """Override the adapter factory for testing or custom wiring."""
     global _adapter_factory
     _adapter_factory = factory
+    from infrastructure.services import delivery as _delivery_mod
+
+    _delivery_mod.set_adapter_factory(factory)
 
 
 def reset_adapter_factory() -> None:
     """Reset the adapter factory to the default create_adapter."""
     global _adapter_factory
     _adapter_factory = _default_create_adapter
+    from infrastructure.services import delivery as _delivery_mod
+
+    _delivery_mod.reset_adapter_factory()
 
 
 # Fallback prompt for finance module when bot has no custom system_prompt
@@ -311,10 +317,10 @@ def generate_report(
             )
             projects: list[Any] = list(session.scalars(stmt).all())
 
-        all_rows: list[dict] = []
-        for proj in projects:
-            if proj.result_data and "rows" in (proj.result_data or {}):
-                all_rows.extend(proj.result_data["rows"])
+            all_rows: list[dict] = []
+            for proj in projects:
+                if proj.result_data and "rows" in (proj.result_data or {}):
+                    all_rows.extend(proj.result_data["rows"])
 
         if not all_rows:
             _send_text_message(
@@ -381,15 +387,15 @@ def _send_text_message(
     bot_token: str, messenger_type: str, chat_id: str, text: str
 ) -> None:
     """Send a plain text message via messenger adapter (sync wrapper)."""
-    adapter = _adapter_factory(messenger_type, bot_token)
+    from infrastructure.services.delivery import _send_text_message as _send
 
-    async def _send() -> None:
-        try:
-            await adapter.send_text(chat_id=chat_id, text=text)
-        finally:
-            await adapter.aclose()
-
-    asyncio.run(_send())
+    _send(
+        bot_token,
+        messenger_type,
+        chat_id,
+        text,
+        adapter_factory=_adapter_factory,
+    )
 
 
 def _get_module_handler(module_type: str):
@@ -451,7 +457,10 @@ def _finance_module_handler(
         item for item in items if item.get("file_id") and item.get("file_type")
     ]
 
-    # 4. Single event loop: download + parse media + call AI
+    # 4. Resolve AI provider from bot config
+    provider_id: str | None = (module_config or {}).get("llm_routing", {}).get("provider")
+
+    # 5. Single event loop: download + parse media + call AI
     result_json = asyncio.run(
         _finance_ai_pipeline(
             system_prompt,
@@ -459,10 +468,11 @@ def _finance_module_handler(
             file_items,
             bot_token,
             messenger_type,
+            provider_id=provider_id,
         )
     )
 
-    # 5. Generate CSV from JSON (graceful if AI returned no rows)
+    # 6. Generate CSV from JSON (graceful if AI returned no rows)
     rows = result_json.get("rows", [])
     if not rows:
         return {
@@ -650,6 +660,7 @@ async def _finance_ai_pipeline(
     file_items: list[dict],
     bot_token: str | None,
     messenger_type: str | None,
+    provider_id: str | None = None,
 ) -> dict:
     """Single async pipeline: download + parse media + call AI."""
     image_paths: list[str] | None = None
@@ -680,7 +691,7 @@ async def _finance_ai_pipeline(
 
     try:
         return await _ai_generate_json(
-            system_prompt, full_text, image_paths=image_paths
+            system_prompt, full_text, image_paths=image_paths, provider_id=provider_id
         )
     finally:
         if image_paths:
@@ -734,12 +745,15 @@ def _get_file_info(mime: str | None) -> tuple[str, str]:
 
 
 async def _ai_generate_json(
-    system_prompt: str, text: str, image_paths: list[str] | None = None
+    system_prompt: str,
+    text: str,
+    image_paths: list[str] | None = None,
+    provider_id: str | None = None,
 ) -> dict:
     """Async wrapper with proper resource cleanup."""
     from infrastructure.ai import create_ai_adapter
 
-    ai = create_ai_adapter()
+    ai = create_ai_adapter(provider_id=provider_id)
     try:
         return await ai.generate_json(
             system_prompt=system_prompt, text=text, image_paths=image_paths
@@ -790,28 +804,6 @@ def _deliver_artifact(snapshot: dict, artifact_path: str) -> None:
     :param snapshot: Session snapshot dict with chat_id, messenger_type, bot_token.
     :param artifact_path: Local path to the file to send.
     """
-    bot_token = snapshot.get("bot_token")
-    messenger_type = snapshot.get("messenger_type")
-    chat_id = snapshot.get("chat_id")
-    if not all([bot_token, messenger_type, chat_id]):
-        logger.warning("Cannot deliver artifact: missing delivery fields in snapshot")
-        return
+    from infrastructure.services.delivery import _deliver_artifact as _deliver
 
-    # Type guards: all() ensures these are not None
-    adapter = _adapter_factory(str(messenger_type), str(bot_token))
-
-    async def _send() -> None:
-        try:
-            await adapter.send_file(
-                chat_id=str(chat_id),
-                file_path=artifact_path,
-                caption="Результат обработки готов ✅",
-            )
-        finally:
-            await adapter.aclose()
-            try:
-                os.unlink(artifact_path)
-            except OSError:
-                logger.warning("Failed to cleanup artifact: %s", artifact_path)
-
-    asyncio.run(_send())
+    _deliver(snapshot, artifact_path, adapter_factory=_adapter_factory)

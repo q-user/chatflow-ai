@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from infrastructure.auth import current_active_user_cookie
 from infrastructure.config import ALL_MODULE_TYPES, settings
+from infrastructure.ai.registry import SUPPORTED_AI_PROVIDERS
 from infrastructure.database.models.bot_instance import BotInstanceTable
 from infrastructure.database.models.company import CompanyTable
 from infrastructure.database.models.user import UserTable
@@ -128,7 +129,10 @@ async def bot_add_form(
     return templates.TemplateResponse(
         request,
         "partials/bot_form.html",
-        {"available_modules": available_modules},
+        {
+            "available_modules": available_modules,
+            "ai_providers": SUPPORTED_AI_PROVIDERS,
+        },
     )
 
 
@@ -139,6 +143,7 @@ async def create_bot(
     messenger_type: str = Form(...),
     module_type: str = Form(...),
     secret: str | None = Form(default=None),
+    ai_provider: str = Form(...),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
@@ -162,6 +167,9 @@ async def create_bot(
 
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
+
+    if ai_provider not in SUPPORTED_AI_PROVIDERS:
+        raise HTTPException(400, f"Invalid ai_provider: {ai_provider}")
 
     # Normalize empty secret to None (HTML form sends "" for empty fields)
     if secret is not None and not secret.strip():
@@ -196,6 +204,7 @@ async def create_bot(
         module_type=module_type,
         status="active",
         secret=secret,
+        config={"llm_routing": {"provider": ai_provider}},
     )
     session.add(bot)
     await session.commit()
