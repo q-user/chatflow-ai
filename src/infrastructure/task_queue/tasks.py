@@ -458,7 +458,9 @@ def _finance_module_handler(
     ]
 
     # 4. Resolve AI provider from bot config
-    provider_id: str | None = (module_config or {}).get("llm_routing", {}).get("provider")
+    provider_id: str | None = (
+        (module_config or {}).get("llm_routing", {}).get("provider")
+    )
 
     # 5. Single event loop: download + parse media + call AI
     result_json = asyncio.run(
