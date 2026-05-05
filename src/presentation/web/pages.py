@@ -230,6 +230,143 @@ async def create_bot(
     )
 
 
+@router.get("/bots/{bot_id}/row", response_class=HTMLResponse)
+async def bot_row(
+    request: Request,
+    bot_id: uuid.UUID,
+    user: UserTable = Depends(current_active_user_cookie),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Return single bot row partial (for cancel edit)."""
+    result = await session.execute(
+        select(BotInstanceTable).where(
+            BotInstanceTable.id == bot_id,
+            BotInstanceTable.company_id == user.company_id,
+        )
+    )
+    bot = result.scalar_one_or_none()
+    if bot is None:
+        return HTMLResponse("Bot not found", status_code=404)
+
+    return templates.TemplateResponse(request, "partials/bot_row.html", {"bot": bot})
+
+
+@router.get("/bots/{bot_id}/edit", response_class=HTMLResponse)
+async def bot_edit_form(
+    request: Request,
+    bot_id: uuid.UUID,
+    user: UserTable = Depends(current_active_user_cookie),
+    session: AsyncSession = Depends(get_db_session),
+    available_modules: list[str] = Depends(get_user_available_modules),
+):
+    """Return inline bot edit form partial."""
+    result = await session.execute(
+        select(BotInstanceTable).where(
+            BotInstanceTable.id == bot_id,
+            BotInstanceTable.company_id == user.company_id,
+        )
+    )
+    bot = result.scalar_one_or_none()
+    if bot is None:
+        return HTMLResponse("Bot not found", status_code=404)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/bot_edit_form.html",
+        {
+            "bot": bot,
+            "available_modules": available_modules,
+            "ai_providers": AI_PROVIDERS,
+        },
+    )
+
+
+@router.post("/bots/{bot_id}/edit", response_class=HTMLResponse)
+async def edit_bot(
+    request: Request,
+    bot_id: uuid.UUID,
+    token: str = Form(...),
+    messenger_type: str = Form(...),
+    module_type: str = Form(...),
+    ai_provider: str = Form(...),
+    ai_model: str = Form(...),
+    secret: str | None = Form(default=None),
+    user: UserTable = Depends(current_active_user_cookie),
+    available_modules: list[str] = Depends(get_user_available_modules),
+    session: AsyncSession = Depends(get_db_session),
+    adapter_factory: AdapterFactory = Depends(get_adapter_factory),
+):
+    """Update bot fields. Re-register webhook if token/messenger/secret changed.
+
+    Returns updated bot_row.html on success.
+    """
+    if messenger_type not in ALLOWED_MESSENGER_TYPES:
+        raise HTTPException(400, f"Invalid messenger_type: {messenger_type}")
+
+    if module_type not in available_modules:
+        raise HTTPException(400, f"Invalid module_type: {module_type}")
+
+    if ai_provider not in AI_PROVIDERS:
+        raise HTTPException(400, f"Invalid ai_provider: {ai_provider}")
+
+    valid_models = {m["id"] for m in AI_PROVIDERS[ai_provider]["models"]}
+    if ai_model not in valid_models:
+        raise HTTPException(400, f"Invalid ai_model: {ai_model}")
+
+    # Normalize empty secret to None
+    if secret is not None and not secret.strip():
+        secret = None
+
+    result = await session.execute(
+        select(BotInstanceTable).where(
+            BotInstanceTable.id == bot_id,
+            BotInstanceTable.company_id == user.company_id,
+        )
+    )
+    bot = result.scalar_one_or_none()
+    if bot is None:
+        return HTMLResponse("Bot not found", status_code=404)
+
+    # Auto-generate secret for MX bots if empty
+    if messenger_type == "MX" and not secret:
+        secret = uuid.uuid4().hex
+
+    # Determine if webhook needs re-registration
+    needs_reregister = (
+        token != bot.token
+        or messenger_type != bot.messenger_type
+        or secret != bot.secret
+    )
+
+    if needs_reregister:
+        webhook_url = (
+            f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
+        )
+        adapter = adapter_factory(messenger_type, token)
+        try:
+            await adapter.register_webhook(webhook_url, secret=secret)
+        except UnsupportedMessengerError as exc:
+            raise HTTPException(501, f"Messenger type not yet supported: {exc}")
+        except NotImplementedError as exc:
+            raise HTTPException(501, f"Feature not yet implemented: {exc}")
+        except ValueError as exc:
+            raise HTTPException(400, f"Webhook registration failed: {exc}")
+        finally:
+            await adapter.aclose()
+
+    # Apply updates
+    bot.token = token
+    bot.messenger_type = messenger_type
+    bot.module_type = module_type
+    bot.secret = secret
+    bot.config = {"llm_routing": {"provider": ai_provider, "model": ai_model}}
+
+    await session.commit()
+    await session.refresh(bot)
+
+    return templates.TemplateResponse(request, "partials/bot_row.html", {"bot": bot})
+
+
 @router.post("/bots/{bot_id}/toggle", response_class=HTMLResponse)
 async def toggle_bot(
     request: Request,

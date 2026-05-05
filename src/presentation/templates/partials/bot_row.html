@@ -1,0 +1,27 @@
+<!-- Single bot table row — used by bot_table.html and returned after edit -->
+<tr class="hover:bg-gray-50">
+  <td class="px-4 py-3 font-mono text-xs">{{ bot.id }}</td>
+  <td class="px-4 py-3">{{ bot.messenger_type }}</td>
+  <td class="px-4 py-3">{{ bot.module_type }}</td>
+  <td class="px-4 py-3">
+    <span class="inline-flex rounded-full px-2 text-xs font-semibold
+      {% if bot.status == 'active' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+      {{ bot.status }}
+    </span>
+  </td>
+  <td class="px-4 py-3 space-x-2">
+    <button hx-get="/bots/{{ bot.id }}/edit"
+            hx-target="closest tr"
+            hx-swap="outerHTML"
+            class="text-indigo-600 hover:text-indigo-900 text-xs">
+      Изменить
+    </button>
+    <button hx-post="/bots/{{ bot.id }}/toggle"
+            hx-target="#bot-table"
+            hx-swap="innerHTML"
+            hx-confirm="{{ 'Деактивировать' if bot.status == 'active' else 'Активировать' }} бота?"
+            class="text-indigo-600 hover:text-indigo-900 text-xs">
+      {{ 'Деактивировать' if bot.status == 'active' else 'Активировать' }}
+    </button>
+  </td>
+</tr>

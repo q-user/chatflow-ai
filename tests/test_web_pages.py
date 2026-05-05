@@ -623,3 +623,208 @@ async def test_htmx_middleware_logout_redirect(client: AsyncClient):
     )
     assert resp.status_code == 204
     assert resp.headers.get("HX-Redirect") == "/login"
+
+
+# ── Bot edit ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_get_form(auth_client: AsyncClient, db_session):
+    """GET /bots/{id}/edit returns inline edit form with pre-filled values."""
+    # Create a bot first
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_test_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    # Fetch bot ID
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_test_token")
+    )
+    bot = result.scalar_one()
+
+    # GET edit form
+    resp = await auth_client.get(f"/bots/{bot.id}/edit")
+    assert resp.status_code == 200
+    assert 'value="edit_test_token"' in resp.text
+    assert (
+        'value="google" selected' in resp.text
+        or "selected>Google AI Studio" in resp.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_post_success(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit updates fields and returns updated row."""
+    # Create bot
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_post_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_post_token")
+    )
+    bot = result.scalar_one()
+
+    # Edit without changing token → no webhook re-register
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_post_token",
+            "messenger_type": "TG",
+            "module_type": "estimator",
+            "ai_provider": "nvidia",
+            "ai_model": "moonshotai/kimi-k2.6",
+        },
+    )
+    assert resp.status_code == 200
+    assert "estimator" in resp.text
+    assert "nvidia" not in resp.text  # row shows messenger_type, not provider
+
+    # Verify DB update
+    await db_session.refresh(bot)
+    assert bot.module_type == "estimator"
+    assert bot.config == {
+        "llm_routing": {"provider": "nvidia", "model": "moonshotai/kimi-k2.6"}
+    }
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_post_invalid_provider(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with invalid ai_provider returns 400."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_inv_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_inv_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_inv_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "invalid_provider",
+            "ai_model": "some-model",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Invalid ai_provider" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_post_webhook_reregister(auth_client: AsyncClient, db_session):
+    """Changing token triggers webhook re-registration and succeeds."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_reg_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_reg_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_reg_token_changed",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    # Verify DB update
+    await db_session.refresh(bot)
+    assert bot.token == "edit_reg_token_changed"
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_unauthorized_company(auth_client: AsyncClient, db_session):
+    """GET /bots/{id}/edit for bot in another company returns 404."""
+    from uuid import uuid4
+
+    # Create a different company and bot under it
+    other_company = CompanyTable(name="Other Company", allowed_modules=["finance"])
+    db_session.add(other_company)
+    await db_session.flush()
+
+    other_bot = BotInstanceTable(
+        id=uuid4(),
+        company_id=other_company.id,
+        token="other_token",
+        messenger_type="TG",
+        module_type="finance",
+        status="active",
+        config={
+            "llm_routing": {"provider": "google", "model": "gemini-3-flash-preview"}
+        },
+    )
+    db_session.add(other_bot)
+    await db_session.commit()
+
+    resp = await auth_client.get(f"/bots/{other_bot.id}/edit")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bot_row_endpoint(auth_client: AsyncClient, db_session):
+    """GET /bots/{id}/row returns single bot row partial."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "row_test_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "row_test_token")
+    )
+    bot = result.scalar_one()
+
+    resp = await auth_client.get(f"/bots/{bot.id}/row")
+    assert resp.status_code == 200
+    assert "row_test_token" not in resp.text  # row doesn't show token
+    assert "TG" in resp.text
+    assert "finance" in resp.text
