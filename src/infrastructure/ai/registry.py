@@ -12,6 +12,7 @@ AI_PROVIDERS: dict[str, dict] = {
         "label": "Google AI Studio",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "key_field": "google_api_key",
+        "use_proxy": True,
         "models": [
             {
                 "id": "gemini-3.1-flash-lite-preview",
@@ -36,6 +37,7 @@ AI_PROVIDERS: dict[str, dict] = {
         "label": "NVIDIA Build",
         "base_url": "https://integrate.api.nvidia.com/v1",
         "key_field": "nvidia_api_key",
+        "use_proxy": True,
         "models": [
             {"id": "moonshotai/kimi-k2.6", "label": "Kimi K2.6", "vision": True},
             {"id": "z-ai/glm-5.1", "label": "GLM 5.1", "vision": True},
@@ -47,6 +49,7 @@ AI_PROVIDERS: dict[str, dict] = {
         "label": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",
         "key_field": "openrouter_api_key",
+        "use_proxy": True,
         "models": [
             {
                 "id": "nvidia/nemotron-3-super-120b-a12b:free",
@@ -74,6 +77,7 @@ AI_PROVIDERS: dict[str, dict] = {
         "label": "Groq Cloud",
         "base_url": "https://api.groq.com/openai/v1",
         "key_field": "stt_api_key",
+        "use_proxy": True,
         "models": [
             {
                 "id": "llama-3.3-70b-versatile",

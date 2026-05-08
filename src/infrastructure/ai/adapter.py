@@ -40,8 +40,6 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
     4. response_format: json_object when available
     """
 
-    _use_proxy = True
-
     def __init__(
         self,
         api_key: str,
@@ -50,8 +48,10 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
         http_client: httpx.AsyncClient | None = None,
         timeout: float = 120.0,
         generation_params: dict[str, Any] | None = None,
+        use_proxy: bool = True,
     ) -> None:
         super().__init__(http_client, timeout=timeout)
+        self._use_proxy = use_proxy
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model

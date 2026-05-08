@@ -39,6 +39,7 @@ def create_ai_adapter(
         base_url=cfg["base_url"],
         model=model_id,
         timeout=settings.ai_timeout,
+        use_proxy=cfg.get("use_proxy", True),
     )
 
 
