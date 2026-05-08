@@ -892,6 +892,56 @@ def test_process_stream_item_failure_marks_project_failed():
         fail_project.status = "failed"
 
 
+def test_process_stream_item_fallback_failed_sends_error_message():
+    from infrastructure.task_queue.tasks import process_stream_item
+
+    mock_session = MagicMock()
+    mock_project = MagicMock()
+    mock_project.id = uuid.uuid4()
+    mock_session.add = MagicMock()
+    mock_session.flush = MagicMock()
+    mock_session.commit = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+
+    mock_result = {
+        "module": "finance",
+        "artifact_path": None,
+        "items_processed": 1,
+        "rows": [],
+        "fallback_failed": True,
+    }
+
+    with (
+        patch(
+            "infrastructure.database.session.sync_session_factory",
+            return_value=mock_session,
+        ),
+        patch("infrastructure.database.session._init_sync_engine"),
+        patch(
+            "infrastructure.task_queue.tasks._finance_module_handler",
+            return_value=mock_result,
+        ),
+        patch("infrastructure.task_queue.tasks._send_text_message") as mock_send,
+    ):
+        snapshot = {
+            "company_id": str(uuid.uuid4()),
+            "user_id": str(uuid.uuid4()),
+            "bot_instance_id": str(uuid.uuid4()),
+            "module_type": "finance",
+            "items": [{"text": "test"}],
+            "chat_id": "123",
+            "messenger_type": "TG",
+            "bot_token": "tok",
+            "bot_config": None,
+        }
+        result = process_stream_item(snapshot)
+
+    assert result["status"] == "completed"
+    mock_send.assert_called_once()
+    assert "Не удалось" in mock_send.call_args[0][3]
+
+
 def test_process_stream_item_sync_engine_not_initialized():
     from infrastructure.task_queue.tasks import process_stream_item
 

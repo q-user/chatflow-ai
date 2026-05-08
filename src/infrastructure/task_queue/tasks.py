@@ -14,6 +14,7 @@ from kombu.exceptions import OperationalError
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from core.interfaces.ai import AIServiceError
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.database import session as db_session
 from infrastructure.messengers import create_adapter as _default_create_adapter
@@ -219,6 +220,16 @@ def process_stream_item(self, snapshot: dict) -> dict:
             project.result_data = result
             project.completed_at = datetime.now(timezone.utc)
             session.commit()
+
+            if result.get("fallback_failed"):
+                if snapshot.get("chat_id") and snapshot.get("messenger_type"):
+                    _send_text_message(
+                        snapshot.get("bot_token", ""),
+                        snapshot.get("messenger_type", ""),
+                        snapshot.get("chat_id", ""),
+                        "Не удалось обработать запрос. Попробуйте позже.",
+                    )
+                return {"project_id": project_id, "status": "completed"}
 
             rows = result.get("rows", [])
             if rows and snapshot.get("chat_id") and snapshot.get("messenger_type"):
@@ -451,15 +462,16 @@ def _finance_module_handler(
     bot_token: str | None = None,
     messenger_type: str | None = None,
 ) -> dict:
-    """Finance module: AI-powered processing → CSV artifact.
+    """Finance module: AI-powered processing with fallback.
 
     :param items: [{"text": ..., "file_id": ..., "file_type": ..., ...}]
     :param module_config: BotInstance.config dict (may contain "system_prompt")
     :param bot_token: Bot API token for file downloads.
     :param messenger_type: Messenger type for adapter creation.
-    :returns: {"module": "finance", "artifact_path": str, "items_processed": int}
-    :raises ValueError: If no text data or AI returned no rows.
-    :raises AIServiceError: If AI call fails.
+    :returns: {"module": "finance", "artifact_path": str|null,
+               "items_processed": int, "rows": list,
+               "fallback_failed": bool}
+    :raises ValueError: If no text data.
     """
     text_chunks = [item.get("text", "") for item in items if item.get("text")]
     combined_text = "\n---\n".join(text_chunks)
@@ -730,6 +742,23 @@ async def _finance_ai_pipeline(
             provider_id=provider_id,
             model_id=model_id,
         )
+    except AIServiceError as e:
+        logger.warning(
+            "Primary AI failed (%s: %s), trying fallback...",
+            type(e).__name__,
+            e,
+        )
+        try:
+            return await _ai_generate_json(
+                system_prompt,
+                full_text,
+                image_paths=image_paths,
+                provider_id="openrouter",
+                model_id="google/gemma-4-26b-a4b-it:free",
+            )
+        except AIServiceError as e2:
+            logger.error("Fallback AI also failed: %s", e2)
+            return {"rows": [], "fallback_failed": True}
     finally:
         if image_paths:
             for p in image_paths:
