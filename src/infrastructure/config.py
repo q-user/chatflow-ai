@@ -25,8 +25,10 @@ class Settings(BaseSettings):
     secret_key: str = ""
     bot_api_key: str = ""
 
-    # SOCKS5 proxy for Telegram adapter only (MX/Yandex/AI/STT go direct)
-    telegram_proxy: str | None = None
+    # SOCKS5/HTTP proxy for outbound requests (Telegram + AI adapters)
+    # Format: socks5://user:pass@host:port or http://user:pass@host:port
+    http_proxy: str | None = None
+    telegram_proxy: str | None = None  # legacy alias, falls back to http_proxy
 
     # AI Provider API keys (used by AI_PROVIDERS registry)
     google_api_key: str = ""

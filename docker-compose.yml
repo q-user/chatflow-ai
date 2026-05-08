@@ -95,7 +95,10 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -v grep | grep 'celery worker' || exit 1"]
+      test:
+        - "CMD-SHELL"
+        - >-
+          python3 -c "import os,sys; sys.exit(0 if any(b'celery' in (open(f'/proc/{p}/cmdline','rb').read() or b'') for p in os.listdir('/proc') if p.isdigit()) else 1)"
       interval: 30s
       timeout: 10s
       retries: 5

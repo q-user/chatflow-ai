@@ -27,8 +27,10 @@ class BaseHttpAdapter:
             if self._http is not None:
                 return self._http
             kwargs: dict = {"timeout": self._timeout}
-            if self._use_proxy and settings.telegram_proxy:
-                kwargs["proxy"] = settings.telegram_proxy
+            if self._use_proxy:
+                proxy = settings.http_proxy or settings.telegram_proxy
+                if proxy:
+                    kwargs["proxy"] = proxy
             self._http = httpx.AsyncClient(**kwargs)
         return self._http  # type: ignore[return-value]
 

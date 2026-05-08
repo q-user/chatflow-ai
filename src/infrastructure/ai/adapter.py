@@ -40,6 +40,8 @@ class OpenRouterAdapter(BaseHttpAdapter, IMultiModalAI):
     4. response_format: json_object when available
     """
 
+    _use_proxy = True
+
     def __init__(
         self,
         api_key: str,
