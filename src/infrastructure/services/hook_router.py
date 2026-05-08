@@ -46,7 +46,7 @@ UNLINKED_PROMPT = (
     "Ваш аккаунт не привязан. "
     "Откройте личный кабинет, сгенерируйте 6-значный код и отправьте его сюда."
 )
-OTP_SUCCESS = "Аккаунт привязан! Теперь вы можете отправлять /new для начала работы."
+OTP_SUCCESS = "Аккаунт привязан! Отправьте данные для начала работы."
 OTP_FAILURE = "Неверный код. Попробуйте снова."
 
 
@@ -256,7 +256,7 @@ class HookRouterService:
                     await self._safe_send(
                         adapter,
                         envelope.chat_id,
-                        "Нет активной сессии. Отправьте /new для начала.",
+                        "Нет активной сессии. Отправьте данные для начала.",
                     )
                     return
 
@@ -298,7 +298,7 @@ class HookRouterService:
             await self._safe_send(
                 adapter,
                 envelope.chat_id,
-                "Неизвестная команда. Доступные: /new, /compile",
+                "Неизвестная команда. Доступные: /compile",
             )
             return
 
@@ -325,7 +325,7 @@ class HookRouterService:
             await self._safe_send(
                 adapter,
                 envelope.chat_id,
-                "Отправьте /new для начала новой сессии.",
+                "Отправьте данные для начала новой сессии.",
             )
 
     async def _dispatch_finance(

@@ -822,7 +822,7 @@ def test_process_stream_item_creates_project_and_delivers():
             "infrastructure.task_queue.tasks._finance_module_handler",
             return_value=mock_result,
         ),
-        patch("infrastructure.task_queue.tasks._deliver_artifact") as mock_deliver,
+        patch("infrastructure.task_queue.tasks._send_text_message") as mock_send,
     ):
         snapshot = {
             "company_id": str(uuid.uuid4()),
@@ -838,7 +838,7 @@ def test_process_stream_item_creates_project_and_delivers():
         result = process_stream_item(snapshot)
 
     assert result["status"] == "completed"
-    mock_deliver.assert_called_once()
+    mock_send.assert_called_once()
 
 
 def test_process_stream_item_failure_marks_project_failed():

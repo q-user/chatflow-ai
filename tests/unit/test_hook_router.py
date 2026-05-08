@@ -454,7 +454,7 @@ async def test_process_webhook_known_user_text_idle(
 
     mock_adapter.send_text.assert_called_once()
     call_args = mock_adapter.send_text.call_args
-    assert "/new" in call_args[0][1]
+    assert "данные" in call_args[0][1]
 
 
 # ──────────────────────────────────────────────

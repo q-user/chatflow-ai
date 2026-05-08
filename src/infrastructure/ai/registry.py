@@ -25,8 +25,13 @@ AI_PROVIDERS: dict[str, dict] = {
                 "vision": True,
             },
             {
-                "id": "gemini-3.1-flash-preview",
-                "label": "Gemini 3.1 Flash Preview",
+                "id": "gemini-3.1-pro-preview",
+                "label": "Gemini 3.1 Pro Preview",
+                "vision": True,
+            },
+            {
+                "id": "gemini-3.1-flash-lite",
+                "label": "Gemini 3.1 Flash Lite",
                 "vision": True,
             },
             {"id": "gemma-4-31b-it", "label": "Gemma 4 31B", "vision": True},

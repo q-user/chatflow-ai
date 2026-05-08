@@ -178,7 +178,7 @@ def process_stream_item(self, snapshot: dict) -> dict:
     """Process a single finance-stream item (text or file).
 
     Creates a Project record, runs the finance module handler,
-    updates status, and delivers CSV artifact to the user.
+    updates status, and delivers a formatted text summary to the user.
 
     :param snapshot: SessionSnapshot dict with single item in items list.
     :returns: Dict with project_id and status.
@@ -220,13 +220,15 @@ def process_stream_item(self, snapshot: dict) -> dict:
             project.completed_at = datetime.now(timezone.utc)
             session.commit()
 
-            artifact_path = result.get("artifact_path")
-            if (
-                artifact_path
-                and snapshot.get("chat_id")
-                and snapshot.get("messenger_type")
-            ):
-                _deliver_artifact(snapshot, artifact_path)
+            rows = result.get("rows", [])
+            if rows and snapshot.get("chat_id") and snapshot.get("messenger_type"):
+                text = _format_finance_text(rows)
+                _send_text_message(
+                    snapshot.get("bot_token", ""),
+                    snapshot.get("messenger_type", ""),
+                    snapshot.get("chat_id", ""),
+                    text,
+                )
 
             return {"project_id": project_id, "status": "completed"}
 
@@ -381,6 +383,33 @@ def _write_report_csv(
         raise RuntimeError(f"Failed to write report CSV to {filepath}: {e}") from e
 
     return filepath
+
+
+def _format_finance_text(rows: list[dict]) -> str:
+    """Format parsed finance rows into a human-readable text message.
+
+    :param rows: List of row dicts with keys like description, amount, currency.
+    :returns: Formatted text with numbered items and totals per currency.
+    """
+    if not rows:
+        return "Не удалось распознать позиции."
+
+    lines = [f"Распознано {len(rows)} позиций:"]
+    totals: dict[str, float] = {}
+    for i, row in enumerate(rows, 1):
+        desc = row.get("description") or row.get("category") or "—"
+        amount = row.get("amount")
+        currency = row.get("currency") or ""
+        if amount is not None:
+            totals[currency] = totals.get(currency, 0.0) + float(amount)
+        amount_str = f"{amount:.2f} {currency}" if amount is not None else "—"
+        lines.append(f"{i}. {desc} — {amount_str}")
+
+    if totals:
+        total_parts = [f"{v:.2f} {k}" if k else f"{v:.2f}" for k, v in totals.items()]
+        lines.append(f"\nИтого: {', '.join(total_parts)}")
+
+    return "\n".join(lines)
 
 
 def _send_text_message(
