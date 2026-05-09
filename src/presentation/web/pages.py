@@ -120,6 +120,40 @@ async def generate_otp_web(
         )
 
 
+@router.post("/dashboard/invite", response_class=HTMLResponse)
+async def invite_partner(
+    request: Request,
+    user: UserTable = Depends(current_active_user_cookie),
+    session: AsyncSession = Depends(get_db_session),
+    otp_service: OTPService = Depends(get_otp_service),
+):
+    """Create a shadow user and generate OTP for team invite."""
+    try:
+        dummy_email = f"invite_{uuid.uuid4().hex[:8]}@chatflow.local"
+        new_user = UserTable(
+            email=dummy_email,
+            hashed_password="!",
+            company_id=user.company_id,
+            is_active=True,
+            is_verified=False,
+            is_superuser=False,
+        )
+        session.add(new_user)
+        await session.flush()
+        code = await otp_service.generate_code(new_user.id)
+        await session.commit()
+        return templates.TemplateResponse(
+            request, "partials/invite_result.html", {"code": code}
+        )
+    except Exception:
+        await session.rollback()
+        return templates.TemplateResponse(
+            request,
+            "partials/invite_result.html",
+            {"error": "Не удалось создать приглашение. Попробуйте позже."},
+        )
+
+
 @router.get("/bots/add", response_class=HTMLResponse)
 async def bot_add_form(
     request: Request,
