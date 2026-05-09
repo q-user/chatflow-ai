@@ -51,6 +51,9 @@ FINANCE_FALLBACK_PROMPT = (
     "Return a JSON object with a single key 'rows' containing an array of objects. "
     "Each object represents a financial entry with keys: "
     "'date', 'description', 'category', 'amount', 'currency'. "
+    "You must categorize the expense using one of the exact account names "
+    "from the provided 'Chart of Accounts'. "
+    "If no account fits perfectly, suggest a new one in the format 'Expenses:New_Category'. "
     "If a field cannot be determined, use null. "
     "Respond ONLY with valid JSON."
 )
@@ -233,7 +236,8 @@ def process_stream_item(self, snapshot: dict) -> dict:
 
             rows = result.get("rows", [])
             if rows and snapshot.get("chat_id") and snapshot.get("messenger_type"):
-                text = _format_finance_text(rows)
+                accounts_list = (bot_config or {}).get("accounts_list")
+                text = _format_finance_text(rows, accounts_list=accounts_list)
                 _send_text_message(
                     snapshot.get("bot_token", ""),
                     snapshot.get("messenger_type", ""),
@@ -280,13 +284,15 @@ def generate_report(
     date_from: str,
     date_to: str,
     period_days: int = 7,
+    bot_instance_id: str | None = None,
 ) -> dict:
     """Generate a CSV report from finance projects in the given date range.
 
-    Queries completed finance projects for the user across ALL bots,
-    extracts all rows from result_data, writes a combined CSV, and delivers it.
+    Queries completed finance projects for the company (optionally scoped
+    to a specific bot), extracts all rows from result_data, writes a
+    combined CSV, and delivers it.
 
-    :param user_id: UUID string of the user.
+    :param user_id: UUID string of the user (kept for signature stability).
     :param company_id: UUID string of the company.
     :param chat_id: Chat ID to deliver the report to.
     :param messenger_type: Messenger type for delivery.
@@ -294,6 +300,7 @@ def generate_report(
     :param date_from: ISO date string YYYY-MM-DD (inclusive).
     :param date_to: ISO date string YYYY-MM-DD (inclusive).
     :param period_days: Number of days in the period (for metadata).
+    :param bot_instance_id: Optional UUID string of the bot to scope the report.
     :returns: Dict with report_path and rows_count.
     """
     db_session._init_sync_engine()
@@ -313,16 +320,20 @@ def generate_report(
                 tzinfo=timezone.utc
             ) + timedelta(days=1)
 
+            where_clause = [
+                ProjectTable.company_id == uuid.UUID(company_id),
+                ProjectTable.module_type == "finance",
+                ProjectTable.status == "completed",
+                ProjectTable.completed_at >= start,
+                ProjectTable.completed_at < end,
+            ]
+            if bot_instance_id:
+                where_clause.append(
+                    ProjectTable.bot_instance_id == uuid.UUID(bot_instance_id)
+                )
             stmt = (
                 select(ProjectTable)
-                .where(
-                    ProjectTable.company_id == uuid.UUID(company_id),
-                    ProjectTable.user_id == uuid.UUID(user_id),
-                    ProjectTable.module_type == "finance",
-                    ProjectTable.status == "completed",
-                    ProjectTable.completed_at >= start,
-                    ProjectTable.completed_at < end,
-                )
+                .where(*where_clause)
                 .order_by(ProjectTable.completed_at)
             )
             projects: list[Any] = list(session.scalars(stmt).all())
@@ -356,7 +367,7 @@ def generate_report(
         return {"report_path": csv_path, "rows_count": len(all_rows)}
 
     except Exception:
-        logger.exception("generate_report failed for user %s", user_id)
+        logger.exception("generate_report failed for company %s bot %s", company_id, bot_instance_id)
         raise
 
 
@@ -393,25 +404,35 @@ def _write_report_csv(
     return filepath
 
 
-def _format_finance_text(rows: list[dict]) -> str:
+def _format_finance_text(rows: list[dict], accounts_list: str | None = None) -> str:
     """Format parsed finance rows into a human-readable text message.
 
     :param rows: List of row dicts with keys like description, amount, currency.
+    :param accounts_list: Optional newline-separated chart of accounts for
+        validating categories. Unknown categories get a warning prefix.
     :returns: Formatted text with numbered items and totals per currency.
     """
     if not rows:
         return "Не удалось распознать позиции."
 
+    known_accounts = set()
+    if accounts_list:
+        known_accounts = {a.strip() for a in accounts_list.splitlines() if a.strip()}
+
     lines = [f"Распознано {len(rows)} позиций:"]
     totals: dict[str, float] = {}
     for i, row in enumerate(rows, 1):
         desc = row.get("description") or row.get("category") or "—"
+        category = row.get("category", "")
+        if category and known_accounts and category not in known_accounts:
+            category = f"⚠️ {category}"
         amount = row.get("amount")
         currency = row.get("currency") or ""
         if amount is not None:
             totals[currency] = totals.get(currency, 0.0) + float(amount)
         amount_str = f"{amount:.2f} {currency}" if amount is not None else "—"
-        lines.append(f"{i}. {desc} — {amount_str}")
+        display = desc if not category or category == desc else f"{desc} ({category})"
+        lines.append(f"{i}. {display} — {amount_str}")
 
     if totals:
         total_parts = [f"{v:.2f} {k}" if k else f"{v:.2f}" for k, v in totals.items()]
@@ -489,6 +510,10 @@ def _finance_module_handler(
     system_prompt += (
         f"\nToday's date: {today}. If the user does not specify a date, use today."
     )
+
+    accounts_list = (module_config or {}).get("accounts_list", "")
+    if accounts_list:
+        system_prompt += f"\n\nChart of Accounts:\n{accounts_list}"
 
     # 3. Filter ALL file items (not just images)
     file_items = [

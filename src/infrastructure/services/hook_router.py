@@ -356,6 +356,7 @@ class HookRouterService:
                             "date_from": date_from,
                             "date_to": date_to,
                             "period_days": period_days,
+                            "bot_instance_id": str(bot.id),
                         },
                     )
                     await self._safe_send(

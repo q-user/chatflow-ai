@@ -704,7 +704,8 @@ async def test_edit_bot_post_success(auth_client: AsyncClient, db_session):
             "model": "moonshotai/kimi-k2.6",
             "fallback_provider": None,
             "fallback_model": None,
-        }
+        },
+        "accounts_list": None,
     }
 
 

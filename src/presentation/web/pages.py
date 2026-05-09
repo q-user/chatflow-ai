@@ -147,6 +147,7 @@ async def create_bot(
     ai_model: str = Form(...),
     fallback_ai_provider: str | None = Form(default=None),
     fallback_ai_model: str | None = Form(default=None),
+    accounts_list: str | None = Form(default=None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
@@ -226,7 +227,8 @@ async def create_bot(
                 "model": ai_model,
                 "fallback_provider": fallback_ai_provider,
                 "fallback_model": fallback_ai_model,
-            }
+            },
+            "accounts_list": accounts_list,
         },
     )
     session.add(bot)
@@ -314,6 +316,7 @@ async def edit_bot(
     ai_model: str = Form(...),
     fallback_ai_provider: str | None = Form(default=None),
     fallback_ai_model: str | None = Form(default=None),
+    accounts_list: str | None = Form(default=None),
     secret: str | None = Form(default=None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
@@ -370,6 +373,7 @@ async def edit_bot(
         "fallback_provider": fallback_ai_provider,
         "fallback_model": fallback_ai_model,
     }
+    config["accounts_list"] = accounts_list
     bot.config = config
 
     await session.commit()
