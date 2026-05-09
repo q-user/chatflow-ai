@@ -27,23 +27,43 @@ class MessengerLinkService:
     ) -> uuid.UUID | None:
         """Verify OTP code and link messenger to the identified user.
 
-        Uses reverse OTP lookup to find user_id from code.
+        Uses reverse OTP lookup first, then falls back to invite code
+        (lazy Shadow User creation).
 
         :returns: user_id if successful, None if code is invalid or messenger_type unknown.
         """
-        # Find user by OTP code (reverse lookup)
+        # 1. Standard OTP reverse lookup
         user_id = await self._otp_service.verify_code_by_value(code)
-        if user_id is None:
+        if user_id is not None:
+            messenger_field = MESSENGER_TYPE_TO_FIELD.get(messenger_type)
+            if messenger_field is None:
+                return None
+            user = await self._session.get(UserTable, user_id)
+            if user is None:
+                return None
+            setattr(user, messenger_field, messenger_id)
+            await self._session.flush()
+            return user_id
+
+        # 2. Invite code fallback → lazy Shadow User creation
+        company_id = await self._otp_service.verify_invite_code(code)
+        if company_id is None:
             return None
 
         messenger_field = MESSENGER_TYPE_TO_FIELD.get(messenger_type)
         if messenger_field is None:
             return None
 
-        user = await self._session.get(UserTable, user_id)
-        if user is None:
-            return None
-
-        setattr(user, messenger_field, messenger_id)
+        new_user = UserTable(
+            email=f"invite_{uuid.uuid4().hex[:8]}@chatflow.local",
+            hashed_password="!",
+            company_id=company_id,
+            is_active=True,
+            is_verified=False,
+            is_superuser=False,
+        )
+        self._session.add(new_user)
         await self._session.flush()
-        return user_id
+        setattr(new_user, messenger_field, messenger_id)
+        await self._session.flush()
+        return new_user.id

@@ -124,29 +124,15 @@ async def generate_otp_web(
 async def invite_partner(
     request: Request,
     user: UserTable = Depends(current_active_user_cookie),
-    session: AsyncSession = Depends(get_db_session),
     otp_service: OTPService = Depends(get_otp_service),
 ):
-    """Create a shadow user and generate OTP for team invite."""
+    """Generate an invite code for a partner to join the company via bot."""
     try:
-        dummy_email = f"invite_{uuid.uuid4().hex[:8]}@chatflow.local"
-        new_user = UserTable(
-            email=dummy_email,
-            hashed_password="!",
-            company_id=user.company_id,
-            is_active=True,
-            is_verified=False,
-            is_superuser=False,
-        )
-        session.add(new_user)
-        await session.flush()
-        code = await otp_service.generate_code(new_user.id)
-        await session.commit()
+        code = await otp_service.generate_invite_code(uuid.UUID(str(user.company_id)))
         return templates.TemplateResponse(
             request, "partials/invite_result.html", {"code": code}
         )
     except Exception:
-        await session.rollback()
         return templates.TemplateResponse(
             request,
             "partials/invite_result.html",

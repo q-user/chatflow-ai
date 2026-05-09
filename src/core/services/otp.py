@@ -106,6 +106,30 @@ class OTPService:
         return f"{secrets.randbelow(1_000_000):06d}"
 
 
+    async def generate_invite_code(self, company_id: uuid.UUID) -> str:
+        """Generate a 6-digit invite code bound to a company.
+
+        Stores invite:{code} → str(company_id) with TTL=86400s (24h).
+        No rate-limiting — invites are cheap and stateless.
+        """
+        code = self._generate_code()
+        key = f"invite:{code}"
+        await self._redis.set(key, str(company_id), ex=86_400)
+        return code
+
+    async def verify_invite_code(self, code: str) -> uuid.UUID | None:
+        """Verify an invite code and return the bound company_id.
+
+        Atomically deletes the key (GETDEL) so codes are single-use.
+        :returns: company_id if valid, None otherwise.
+        """
+        key = f"invite:{code}"
+        raw = await self._redis.getdel(key)
+        if raw is None:
+            return None
+        return uuid.UUID(raw.decode() if isinstance(raw, bytes) else raw)
+
+
 class RateLimitExceeded(Exception):
     """Raised when OTP generation is rate-limited."""
 

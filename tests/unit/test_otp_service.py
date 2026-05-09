@@ -226,3 +226,45 @@ async def test_reverse_key_has_ttl(
     ttl = await fake_redis.ttl(f"otp_reverse:{code}")
     assert ttl > 0
     assert ttl <= OTPService.OTP_TTL
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_stores_company(
+    otp_service: OTPService, fake_redis: FakeAsyncRedis
+):
+    """generate_invite_code stores invite:{code} → company_id with 24h TTL."""
+    company_id = uuid.uuid4()
+    code = await otp_service.generate_invite_code(company_id)
+
+    assert len(code) == 6 and code.isdigit()
+    stored = await fake_redis.get(f"invite:{code}")
+    assert stored is not None
+    assert stored.decode() == str(company_id)
+
+    ttl = await fake_redis.ttl(f"invite:{code}")
+    assert ttl > 86_000  # ~24h
+
+
+@pytest.mark.asyncio
+async def test_verify_invite_code_returns_company(
+    otp_service: OTPService
+):
+    """verify_invite_code returns company_id and atomically consumes code."""
+    company_id = uuid.uuid4()
+    code = await otp_service.generate_invite_code(company_id)
+
+    result = await otp_service.verify_invite_code(code)
+    assert result == company_id
+
+    # Second lookup — key consumed
+    result2 = await otp_service.verify_invite_code(code)
+    assert result2 is None
+
+
+@pytest.mark.asyncio
+async def test_verify_invite_code_invalid_returns_none(
+    otp_service: OTPService
+):
+    """verify_invite_code returns None for unknown/invalid code."""
+    result = await otp_service.verify_invite_code("000000")
+    assert result is None

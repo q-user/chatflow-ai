@@ -80,3 +80,41 @@ async def test_link_by_otp_user_not_found(link_service, mock_otp_service, mock_s
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_link_by_invite_code_creates_shadow_user(
+    link_service, mock_otp_service, mock_session
+):
+    """Invite code fallback: creates shadow user and links messenger."""
+    company_id = uuid.uuid4()
+    mock_otp_service.verify_code_by_value.return_value = None
+    mock_otp_service.verify_invite_code.return_value = company_id
+
+    await link_service.link_by_otp(
+        code="654321", messenger_type="TG", messenger_id="tg_789"
+    )
+
+    # Shadow user was added to session and flushed twice
+    assert mock_session.add.called
+    added_user = mock_session.add.call_args[0][0]
+    assert added_user.email.startswith("invite_")
+    assert added_user.email.endswith("@chatflow.local")
+    assert added_user.company_id == company_id
+    assert added_user.hashed_password == "!"
+    assert added_user.is_active is True
+    assert added_user.telegram_id == "tg_789"
+    assert mock_session.flush.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_link_by_invite_code_invalid_returns_none(link_service, mock_otp_service):
+    """Both OTP and invite code invalid → returns None."""
+    mock_otp_service.verify_code_by_value.return_value = None
+    mock_otp_service.verify_invite_code.return_value = None
+
+    result = await link_service.link_by_otp(
+        code="000000", messenger_type="TG", messenger_id="tg_123"
+    )
+
+    assert result is None
