@@ -694,13 +694,17 @@ async def test_edit_bot_post_success(auth_client: AsyncClient, db_session):
     )
     assert resp.status_code == 200
     assert "estimator" in resp.text
-    assert "nvidia" not in resp.text  # row shows messenger_type, not provider
 
     # Verify DB update
     await db_session.refresh(bot)
     assert bot.module_type == "estimator"
     assert bot.config == {
-        "llm_routing": {"provider": "nvidia", "model": "moonshotai/kimi-k2.6"}
+        "llm_routing": {
+            "provider": "nvidia",
+            "model": "moonshotai/kimi-k2.6",
+            "fallback_provider": None,
+            "fallback_model": None,
+        }
     }
 
 
@@ -739,8 +743,8 @@ async def test_edit_bot_post_invalid_provider(auth_client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_edit_bot_post_webhook_reregister(auth_client: AsyncClient, db_session):
-    """Changing token triggers webhook re-registration and succeeds."""
+async def test_edit_bot_post_module_changed(auth_client: AsyncClient, db_session):
+    """Changing module_type succeeds; token and messenger_type remain unchanged."""
     resp = await auth_client.post(
         "/bots",
         data={
@@ -761,9 +765,9 @@ async def test_edit_bot_post_webhook_reregister(auth_client: AsyncClient, db_ses
     resp = await auth_client.post(
         f"/bots/{bot.id}/edit",
         data={
-            "token": "edit_reg_token_changed",
-            "messenger_type": "TG",
-            "module_type": "finance",
+            "token": "edit_reg_token",  # readonly, must match current
+            "messenger_type": "TG",  # readonly, must match current
+            "module_type": "estimator",
             "ai_provider": "google",
             "ai_model": "gemini-3-flash-preview",
         },
@@ -772,7 +776,9 @@ async def test_edit_bot_post_webhook_reregister(auth_client: AsyncClient, db_ses
 
     # Verify DB update
     await db_session.refresh(bot)
-    assert bot.token == "edit_reg_token_changed"
+    assert bot.token == "edit_reg_token"
+    assert bot.messenger_type == "TG"
+    assert bot.module_type == "estimator"
 
 
 @pytest.mark.asyncio
@@ -889,8 +895,8 @@ async def test_create_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
-async def test_edit_bot_invalid_messenger_type(auth_client: AsyncClient, db_session):
-    """POST /bots/{id}/edit with invalid messenger_type returns 400."""
+async def test_edit_bot_messenger_type_ignored(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with different messenger_type is ignored (readonly)."""
     # Create bot via HTTP to get correct company_id
     resp = await auth_client.post(
         "/bots",
@@ -913,14 +919,16 @@ async def test_edit_bot_invalid_messenger_type(auth_client: AsyncClient, db_sess
         f"/bots/{bot.id}/edit",
         data={
             "token": "edit_messenger_token",
-            "messenger_type": "INVALID",
+            "messenger_type": "INVALID",  # readonly, ignored
             "module_type": "finance",
             "ai_provider": "google",
             "ai_model": "gemini-3-flash-preview",
         },
     )
-    assert resp.status_code == 400
-    assert "Invalid messenger_type" in resp.text
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.messenger_type == "TG"
 
 
 @pytest.mark.asyncio
@@ -1059,6 +1067,8 @@ async def test_edit_bot_config_merge_preserves_system_prompt(
     assert bot.config.get("llm_routing") == {
         "provider": "nvidia",
         "model": "moonshotai/kimi-k2.6",
+        "fallback_provider": None,
+        "fallback_model": None,
     }
 
 
@@ -1109,12 +1119,12 @@ async def test_edit_bot_empty_secret_normalized(auth_client: AsyncClient, db_ses
 
 @pytest.mark.asyncio
 async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
-    """POST /bots/{id}/edit switching to MX auto-generates secret if empty."""
+    """POST /bots/{id}/edit for MX bot auto-generates secret if empty."""
     resp = await auth_client.post(
         "/bots",
         data={
             "token": "edit_mx_token",
-            "messenger_type": "TG",
+            "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
             "ai_model": "gemini-3-flash-preview",
@@ -1126,9 +1136,12 @@ async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
         select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_token")
     )
     bot = result.scalar_one()
-    assert bot.secret is None  # TG bot has no secret
+    assert bot.secret is not None  # auto-generated on create
 
-    # Switch to MX without secret
+    # Clear secret and edit — should auto-regenerate
+    bot.secret = None
+    await db_session.commit()
+
     resp = await auth_client.post(
         f"/bots/{bot.id}/edit",
         data={
@@ -1147,14 +1160,12 @@ async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
-async def test_edit_bot_webhook_value_error(
-    auth_client: AsyncClient, db_session, monkeypatch
-):
-    """POST /bots/{id}/edit with token change but webhook raises ValueError → 400."""
+async def test_edit_bot_fallback_ai_saved(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit saves fallback AI provider and model."""
     resp = await auth_client.post(
         "/bots",
         data={
-            "token": "edit_webhook_token",
+            "token": "edit_fb_token",
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
@@ -1164,37 +1175,25 @@ async def test_edit_bot_webhook_value_error(
     assert resp.status_code == 200
 
     result = await db_session.execute(
-        select(BotInstanceTable).where(BotInstanceTable.token == "edit_webhook_token")
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_fb_token")
     )
     bot = result.scalar_one()
 
-    # Force adapter.register_webhook to raise ValueError
-    from infrastructure.services.hook_router import get_adapter_factory
-    from unittest.mock import AsyncMock
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_fb_token",
+            "messenger_type": "TG",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            "fallback_ai_provider": "openrouter",
+            "fallback_ai_model": "google/gemma-4-26b-a4b-it:free",
+        },
+    )
+    assert resp.status_code == 200
 
-    failing_adapter = AsyncMock()
-    failing_adapter.register_webhook = AsyncMock(side_effect=ValueError("bad webhook"))
-    failing_adapter.aclose = AsyncMock()
-
-    def failing_factory(messenger_type: str, token: str):
-        return failing_adapter
-
-    # Patch the factory in app dependency overrides
-    app = auth_client._transport.app
-    app.dependency_overrides[get_adapter_factory] = lambda: failing_factory
-
-    try:
-        resp = await auth_client.post(
-            f"/bots/{bot.id}/edit",
-            data={
-                "token": "edit_webhook_token_changed",
-                "messenger_type": "TG",
-                "module_type": "finance",
-                "ai_provider": "google",
-                "ai_model": "gemini-3-flash-preview",
-            },
-        )
-        assert resp.status_code == 400
-        assert "Webhook registration failed" in resp.text
-    finally:
-        app.dependency_overrides.pop(get_adapter_factory, None)
+    await db_session.refresh(bot)
+    llm = bot.config.get("llm_routing", {})
+    assert llm.get("fallback_provider") == "openrouter"
+    assert llm.get("fallback_model") == "google/gemma-4-26b-a4b-it:free"

@@ -3,7 +3,7 @@
       hx-target="#bot-table"
       hx-swap="innerHTML"
       hx-on::after-request="if(event.detail.successful) this.reset()"
-      class="mb-6 grid grid-cols-6 gap-4 items-end">
+      class="mb-6 grid grid-cols-8 gap-4 items-end">
 
   <div>
     <label class="block text-sm font-medium text-gray-700">Token</label>
@@ -31,7 +31,6 @@
     </select>
   </div>
 
-
   <div>
     <label class="block text-sm font-medium text-gray-700">AI Provider</label>
     <select name="ai_provider" id="ai_provider" required
@@ -49,6 +48,24 @@
     </select>
   </div>
 
+  <div>
+    <label class="block text-sm font-medium text-gray-700">Fallback Provider</label>
+    <select name="fallback_ai_provider" id="fallback_ai_provider"
+            class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+      <option value="">— Нет —</option>
+      {% for key, provider in ai_providers.items() %}
+      <option value="{{ key }}">{{ provider.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-gray-700">Fallback Model</label>
+    <select name="fallback_ai_model" id="fallback_ai_model"
+            class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </select>
+  </div>
+
   <button type="submit"
           class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
     Создать
@@ -58,23 +75,45 @@
 <script>
   (function() {
     var providers = {{ ai_providers | tojson }};
+
+    // Primary AI
     var providerSel = document.getElementById('ai_provider');
     var modelSel = document.getElementById('ai_model');
 
-    function updateModels() {
-      var pid = providerSel.value;
-      var models = providers[pid] ? providers[pid].models : [];
-      modelSel.innerHTML = '';
+    function updateModels(sel, pid) {
+      var models = pid && providers[pid] ? providers[pid].models : [];
+      sel.innerHTML = '';
       models.forEach(function(m) {
         var opt = document.createElement('option');
         opt.value = m.id;
         opt.textContent = m.label;
-        modelSel.appendChild(opt);
+        sel.appendChild(opt);
       });
     }
 
-    providerSel.addEventListener('change', updateModels);
-    updateModels();
+    providerSel.addEventListener('change', function() {
+      updateModels(modelSel, providerSel.value);
+    });
+    updateModels(modelSel, providerSel.value);
+
+    // Fallback AI
+    var fbProviderSel = document.getElementById('fallback_ai_provider');
+    var fbModelSel = document.getElementById('fallback_ai_model');
+
+    function updateFbModels() {
+      var pid = fbProviderSel.value;
+      var models = pid && providers[pid] ? providers[pid].models : [];
+      fbModelSel.innerHTML = '';
+      models.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        fbModelSel.appendChild(opt);
+      });
+    }
+
+    fbProviderSel.addEventListener('change', updateFbModels);
+    updateFbModels();
   })();
 
   document.querySelector('#bot-form-container form')

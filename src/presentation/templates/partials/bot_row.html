@@ -1,8 +1,25 @@
 <!-- Single bot table row — used by bot_table.html and returned after edit -->
+{% set llm = (bot.config or {}).get('llm_routing', {}) %}
+{% set provider = llm.get('provider', '') %}
+{% set model = llm.get('model', '') %}
+{% set fb_provider = llm.get('fallback_provider', '') %}
+{% set fb_model = llm.get('fallback_model', '') %}
+{% set p_label = ai_providers[provider]['label'] if provider in ai_providers else provider %}
+{% set m_obj = (ai_providers[provider]['models'] | selectattr('id', 'equalto', model) | list | first) if provider in ai_providers and model else None %}
+{% set m_label = m_obj['label'] if m_obj else model %}
+{% set fb_m_obj = (ai_providers[fb_provider]['models'] | selectattr('id', 'equalto', fb_model) | list | first) if fb_provider in ai_providers and fb_model else None %}
+{% set fb_m_label = fb_m_obj['label'] if fb_m_obj else fb_model %}
 <tr class="hover:bg-gray-50">
   <td class="px-4 py-3 font-mono text-xs">{{ bot.id }}</td>
   <td class="px-4 py-3">{{ bot.messenger_type }}</td>
   <td class="px-4 py-3">{{ bot.module_type }}</td>
+  <td class="px-4 py-3 text-xs">
+    {{ m_label }}<br>
+    <span class="text-gray-500">{{ p_label }}</span>
+    {% if fb_m_label %}
+    <br><span class="text-gray-400">FB: {{ fb_m_label }}</span>
+    {% endif %}
+  </td>
   <td class="px-4 py-3">
     <span class="inline-flex rounded-full px-2 text-xs font-semibold
       {% if bot.status == 'active' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">

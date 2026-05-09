@@ -510,6 +510,7 @@ def _finance_module_handler(
             messenger_type,
             provider_id=provider_id,
             model_id=model_id,
+            llm_routing=llm_routing,
         )
     )
 
@@ -703,6 +704,7 @@ async def _finance_ai_pipeline(
     messenger_type: str | None,
     provider_id: str | None = None,
     model_id: str | None = None,
+    llm_routing: dict | None = None,
 ) -> dict:
     """Single async pipeline: download + parse media + call AI."""
     image_paths: list[str] | None = None
@@ -745,13 +747,17 @@ async def _finance_ai_pipeline(
             type(e).__name__,
             e,
         )
+        fallback_provider = (llm_routing or {}).get("fallback_provider")
+        fallback_model = (llm_routing or {}).get("fallback_model")
+        if not fallback_provider or not fallback_model:
+            return {"rows": [], "fallback_failed": True}
         try:
             return await _ai_generate_json(
                 system_prompt,
                 full_text,
                 image_paths=image_paths,
-                provider_id="openrouter",
-                model_id="google/gemma-4-26b-a4b-it:free",
+                provider_id=fallback_provider,
+                model_id=fallback_model,
             )
         except AIServiceError as e2:
             logger.error("Fallback AI also failed: %s", e2)

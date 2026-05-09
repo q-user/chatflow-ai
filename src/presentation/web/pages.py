@@ -96,7 +96,7 @@ async def dashboard_page(
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"user": user, "bots": bots},
+        {"user": user, "bots": bots, "ai_providers": AI_PROVIDERS},
     )
 
 
@@ -145,6 +145,8 @@ async def create_bot(
     secret: str | None = Form(default=None),
     ai_provider: str = Form(...),
     ai_model: str = Form(...),
+    fallback_ai_provider: str | None = Form(default=None),
+    fallback_ai_model: str | None = Form(default=None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
@@ -175,6 +177,15 @@ async def create_bot(
     valid_models = {m["id"] for m in AI_PROVIDERS[ai_provider]["models"]}
     if ai_model not in valid_models:
         raise HTTPException(400, f"Invalid ai_model: {ai_model}")
+
+    if fallback_ai_provider:
+        if fallback_ai_provider not in AI_PROVIDERS:
+            raise HTTPException(
+                400, f"Invalid fallback_ai_provider: {fallback_ai_provider}"
+            )
+        fb_valid = {m["id"] for m in AI_PROVIDERS[fallback_ai_provider]["models"]}
+        if fallback_ai_model not in fb_valid:
+            raise HTTPException(400, f"Invalid fallback_ai_model: {fallback_ai_model}")
 
     # Normalize empty secret to None (HTML form sends "" for empty fields)
     if secret is not None and not secret.strip():
@@ -209,7 +220,14 @@ async def create_bot(
         module_type=module_type,
         status="active",
         secret=secret,
-        config={"llm_routing": {"provider": ai_provider, "model": ai_model}},
+        config={
+            "llm_routing": {
+                "provider": ai_provider,
+                "model": ai_model,
+                "fallback_provider": fallback_ai_provider,
+                "fallback_model": fallback_ai_model,
+            }
+        },
     )
     session.add(bot)
     await session.commit()
@@ -226,7 +244,7 @@ async def create_bot(
     return templates.TemplateResponse(
         request,
         "partials/bot_table.html",
-        {"bots": bots},
+        {"bots": bots, "ai_providers": AI_PROVIDERS},
     )
 
 
@@ -248,7 +266,11 @@ async def bot_row(
     if bot is None:
         return HTMLResponse("Bot not found", status_code=404)
 
-    return templates.TemplateResponse(request, "partials/bot_row.html", {"bot": bot})
+    return templates.TemplateResponse(
+        request,
+        "partials/bot_row.html",
+        {"bot": bot, "ai_providers": AI_PROVIDERS},
+    )
 
 
 @router.get("/bots/{bot_id}/edit", response_class=HTMLResponse)
@@ -290,19 +312,17 @@ async def edit_bot(
     module_type: str = Form(...),
     ai_provider: str = Form(...),
     ai_model: str = Form(...),
+    fallback_ai_provider: str | None = Form(default=None),
+    fallback_ai_model: str | None = Form(default=None),
     secret: str | None = Form(default=None),
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
-    adapter_factory: AdapterFactory = Depends(get_adapter_factory),
 ):
-    """Update bot fields. Re-register webhook if token/messenger/secret changed.
+    """Update bot fields. Token and messenger_type are readonly.
 
     Returns updated bot_row.html on success.
     """
-    if messenger_type not in ALLOWED_MESSENGER_TYPES:
-        raise HTTPException(400, f"Invalid messenger_type: {messenger_type}")
-
     if module_type not in available_modules:
         raise HTTPException(400, f"Invalid module_type: {module_type}")
 
@@ -312,6 +332,15 @@ async def edit_bot(
     valid_models = {m["id"] for m in AI_PROVIDERS[ai_provider]["models"]}
     if ai_model not in valid_models:
         raise HTTPException(400, f"Invalid ai_model: {ai_model}")
+
+    if fallback_ai_provider:
+        if fallback_ai_provider not in AI_PROVIDERS:
+            raise HTTPException(
+                400, f"Invalid fallback_ai_provider: {fallback_ai_provider}"
+            )
+        fb_valid = {m["id"] for m in AI_PROVIDERS[fallback_ai_provider]["models"]}
+        if fallback_ai_model not in fb_valid:
+            raise HTTPException(400, f"Invalid fallback_ai_model: {fallback_ai_model}")
 
     # Normalize empty secret to None
     if secret is not None and not secret.strip():
@@ -328,45 +357,29 @@ async def edit_bot(
         return HTMLResponse("Bot not found", status_code=404)
 
     # Auto-generate secret for MX bots if empty
-    if messenger_type == "MX" and not secret:
+    if bot.messenger_type == "MX" and not secret:
         secret = uuid.uuid4().hex
 
-    # Determine if webhook needs re-registration
-    needs_reregister = (
-        token != bot.token
-        or messenger_type != bot.messenger_type
-        or secret != bot.secret
-    )
-
-    if needs_reregister:
-        webhook_url = (
-            f"https://{settings.domain}/api/v1/hooks/{messenger_type}/{bot_id}"
-        )
-        adapter = adapter_factory(messenger_type, token)
-        try:
-            await adapter.register_webhook(webhook_url, secret=secret)
-        except UnsupportedMessengerError as exc:
-            raise HTTPException(501, f"Messenger type not yet supported: {exc}")
-        except NotImplementedError as exc:
-            raise HTTPException(501, f"Feature not yet implemented: {exc}")
-        except ValueError as exc:
-            raise HTTPException(400, f"Webhook registration failed: {exc}")
-        finally:
-            await adapter.aclose()
-
     # Apply updates (merge to preserve other config keys like system_prompt)
-    bot.token = token
-    bot.messenger_type = messenger_type
     bot.module_type = module_type
     bot.secret = secret
     config = dict(bot.config or {})
-    config["llm_routing"] = {"provider": ai_provider, "model": ai_model}
+    config["llm_routing"] = {
+        "provider": ai_provider,
+        "model": ai_model,
+        "fallback_provider": fallback_ai_provider,
+        "fallback_model": fallback_ai_model,
+    }
     bot.config = config
 
     await session.commit()
     await session.refresh(bot)
 
-    return templates.TemplateResponse(request, "partials/bot_row.html", {"bot": bot})
+    return templates.TemplateResponse(
+        request,
+        "partials/bot_row.html",
+        {"bot": bot, "ai_providers": AI_PROVIDERS},
+    )
 
 
 @router.post("/bots/{bot_id}/toggle", response_class=HTMLResponse)
@@ -401,5 +414,5 @@ async def toggle_bot(
     return templates.TemplateResponse(
         request,
         "partials/bot_table.html",
-        {"bots": bots},
+        {"bots": bots, "ai_providers": AI_PROVIDERS},
     )

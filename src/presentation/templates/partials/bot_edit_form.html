@@ -1,27 +1,27 @@
 <!-- Inline edit form — replaces bot_row.html when editing -->
 {% set current_provider = (bot.config or {}).get('llm_routing', {}).get('provider', '') %}
 {% set current_model = (bot.config or {}).get('llm_routing', {}).get('model', '') %}
+{% set current_fb_provider = (bot.config or {}).get('llm_routing', {}).get('fallback_provider', '') %}
+{% set current_fb_model = (bot.config or {}).get('llm_routing', {}).get('fallback_model', '') %}
 <tr>
-  <td colspan="5" class="px-4 py-3 bg-gray-50">
+  <td colspan="6" class="px-4 py-3 bg-gray-50">
     <form hx-post="/bots/{{ bot.id }}/edit"
           hx-target="closest tr"
           hx-swap="outerHTML"
-          class="grid grid-cols-7 gap-3 items-end">
+          class="grid grid-cols-8 gap-3 items-end">
 
       <div>
         <label class="block text-xs font-medium text-gray-700">Token</label>
-        <input type="text" name="token" value="{{ bot.token }}" required
-               class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        <input type="text" value="{{ bot.token }}" readonly
+               class="mt-1 block w-full rounded-md border border-gray-200 bg-gray-100 px-2 py-1.5 text-xs shadow-sm text-gray-500">
+        <input type="hidden" name="token" value="{{ bot.token }}">
       </div>
 
       <div>
         <label class="block text-xs font-medium text-gray-700">Messenger</label>
-        <select name="messenger_type" required
-                class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-          <option value="TG" {% if bot.messenger_type == 'TG' %}selected{% endif %}>Telegram</option>
-          <option value="YM" {% if bot.messenger_type == 'YM' %}selected{% endif %}>Yandex Messenger</option>
-          <option value="MX" {% if bot.messenger_type == 'MX' %}selected{% endif %}>MAX (eXpress)</option>
-        </select>
+        <input type="text" value="{{ bot.messenger_type }}" readonly
+               class="mt-1 block w-full rounded-md border border-gray-200 bg-gray-100 px-2 py-1.5 text-xs shadow-sm text-gray-500">
+        <input type="hidden" name="messenger_type" value="{{ bot.messenger_type }}">
       </div>
 
       <div>
@@ -33,7 +33,6 @@
           {% endfor %}
         </select>
       </div>
-
 
       <div>
         <label class="block text-xs font-medium text-gray-700">AI Provider</label>
@@ -48,6 +47,24 @@
       <div>
         <label class="block text-xs font-medium text-gray-700">AI Model</label>
         <select name="ai_model" id="edit_ai_model_{{ bot.id }}" required
+                class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-700">Fallback Provider</label>
+        <select name="fallback_ai_provider" id="edit_fb_ai_provider_{{ bot.id }}"
+                class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+          <option value="">— Нет —</option>
+          {% for key, provider in ai_providers.items() %}
+          <option value="{{ key }}" {% if current_fb_provider == key %}selected{% endif %}>{{ provider.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-700">Fallback Model</label>
+        <select name="fallback_ai_model" id="edit_fb_ai_model_{{ bot.id }}"
                 class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </select>
       </div>
@@ -72,26 +89,53 @@
 <script>
   (function() {
     var providers = {{ ai_providers | tojson }};
+
+    // Primary AI
     var providerSel = document.getElementById('edit_ai_provider_{{ bot.id }}');
     var modelSel = document.getElementById('edit_ai_model_{{ bot.id }}');
     var currentModel = {{ current_model | tojson }};
 
-    function updateModels() {
+    function updateModels(sel, current) {
       var pid = providerSel.value;
       var models = providers[pid] ? providers[pid].models : [];
-      modelSel.innerHTML = '';
+      sel.innerHTML = '';
       models.forEach(function(m) {
         var opt = document.createElement('option');
         opt.value = m.id;
         opt.textContent = m.label;
-        if (currentModel && m.id === currentModel) {
+        if (current && m.id === current) {
           opt.selected = true;
         }
-        modelSel.appendChild(opt);
+        sel.appendChild(opt);
       });
     }
 
-    providerSel.addEventListener('change', updateModels);
-    updateModels();
+    providerSel.addEventListener('change', function() {
+      updateModels(modelSel, currentModel);
+    });
+    updateModels(modelSel, currentModel);
+
+    // Fallback AI
+    var fbProviderSel = document.getElementById('edit_fb_ai_provider_{{ bot.id }}');
+    var fbModelSel = document.getElementById('edit_fb_ai_model_{{ bot.id }}');
+    var currentFbModel = {{ current_fb_model | tojson }};
+
+    function updateFbModels() {
+      var pid = fbProviderSel.value;
+      var models = pid && providers[pid] ? providers[pid].models : [];
+      fbModelSel.innerHTML = '';
+      models.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        if (currentFbModel && m.id === currentFbModel) {
+          opt.selected = true;
+        }
+        fbModelSel.appendChild(opt);
+      });
+    }
+
+    fbProviderSel.addEventListener('change', updateFbModels);
+    updateFbModels();
   })();
 </script>
