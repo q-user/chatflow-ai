@@ -274,7 +274,6 @@ def generate_report(
     self,
     user_id: str,
     company_id: str,
-    bot_instance_id: str,
     chat_id: str,
     messenger_type: str,
     bot_token: str,
@@ -284,12 +283,11 @@ def generate_report(
 ) -> dict:
     """Generate a CSV report from finance projects in the given date range.
 
-    Queries completed finance projects for the user/company, extracts
-    all rows from result_data, writes a combined CSV, and delivers it.
+    Queries completed finance projects for the user across ALL bots,
+    extracts all rows from result_data, writes a combined CSV, and delivers it.
 
     :param user_id: UUID string of the user.
     :param company_id: UUID string of the company.
-    :param bot_instance_id: UUID string of the bot instance.
     :param chat_id: Chat ID to deliver the report to.
     :param messenger_type: Messenger type for delivery.
     :param bot_token: Bot token for delivery.
@@ -320,7 +318,6 @@ def generate_report(
                 .where(
                     ProjectTable.company_id == uuid.UUID(company_id),
                     ProjectTable.user_id == uuid.UUID(user_id),
-                    ProjectTable.bot_instance_id == uuid.UUID(bot_instance_id),
                     ProjectTable.module_type == "finance",
                     ProjectTable.status == "completed",
                     ProjectTable.completed_at >= start,

@@ -965,7 +965,6 @@ def test_generate_report_with_rows(tmp_path):
 
     company_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
-    bot_id = str(uuid.uuid4())
 
     mock_proj = MagicMock()
     mock_proj.result_data = {
@@ -993,7 +992,6 @@ def test_generate_report_with_rows(tmp_path):
         result = generate_report(
             user_id=user_id,
             company_id=company_id,
-            bot_instance_id=bot_id,
             chat_id="123",
             messenger_type="TG",
             bot_token="tok",
@@ -1011,7 +1009,6 @@ def test_generate_report_no_rows_sends_text():
 
     company_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
-    bot_id = str(uuid.uuid4())
 
     mock_session = MagicMock()
     mock_scalars = MagicMock()
@@ -1031,7 +1028,6 @@ def test_generate_report_no_rows_sends_text():
         result = generate_report(
             user_id=user_id,
             company_id=company_id,
-            bot_instance_id=bot_id,
             chat_id="123",
             messenger_type="TG",
             bot_token="tok",
@@ -1060,7 +1056,6 @@ def test_generate_report_sync_engine_not_initialized():
             generate_report(
                 user_id=str(uuid.uuid4()),
                 company_id=str(uuid.uuid4()),
-                bot_instance_id=str(uuid.uuid4()),
                 chat_id="123",
                 messenger_type="TG",
                 bot_token="tok",
@@ -1088,7 +1083,6 @@ def test_generate_report_failure_sentry():
             generate_report(
                 user_id=str(uuid.uuid4()),
                 company_id=str(uuid.uuid4()),
-                bot_instance_id=str(uuid.uuid4()),
                 chat_id="123",
                 messenger_type="TG",
                 bot_token="tok",

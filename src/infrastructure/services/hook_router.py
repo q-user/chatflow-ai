@@ -350,7 +350,6 @@ class HookRouterService:
                         kwargs={
                             "user_id": str(user.id),
                             "company_id": str(user.company_id),
-                            "bot_instance_id": str(bot.id),
                             "chat_id": envelope.chat_id,
                             "messenger_type": envelope.messenger_type,
                             "bot_token": bot.token,
