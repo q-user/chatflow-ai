@@ -50,10 +50,16 @@ FINANCE_FALLBACK_PROMPT = (
     "Extract structured financial data from the user text. "
     "Return a JSON object with a single key 'rows' containing an array of objects. "
     "Each object represents a financial entry with keys: "
-    "'date', 'description', 'category', 'amount', 'currency'. "
-    "You must categorize the expense using one of the exact account names "
+    "'date', 'description', 'category', 'amount', 'currency', 'type'. "
+    "The 'type' key must be strictly 'income' or 'expense'. "
+    "Classify the transaction as 'income' (money received) or 'expense' (money spent). "
+    "Amount must always be a positive number. "
+    "For expenses, use accounts starting with 'Expenses:'. "
+    "For income, use accounts starting with 'Income:'. "
+    "You must categorize the transaction using one of the exact account names "
     "from the provided 'Chart of Accounts'. "
-    "If no account fits perfectly, suggest a new one in the format 'Expenses:New_Category'. "
+    "If no account fits perfectly, suggest a new one in the format "
+    "'Expenses:New_Category' for expenses or 'Income:New_Category' for income. "
     "If a field cannot be determined, use null. "
     "Respond ONLY with valid JSON."
 )
@@ -422,6 +428,8 @@ def _format_finance_text(rows: list[dict], accounts_list: str | None = None) -> 
     lines = [f"Распознано {len(rows)} позиций:"]
     totals: dict[str, float] = {}
     for i, row in enumerate(rows, 1):
+        entry_type = row.get("type", "expense")
+        is_income = entry_type == "income"
         desc = row.get("description") or row.get("category") or "—"
         category = row.get("category", "")
         if category and known_accounts and category not in known_accounts:
@@ -429,13 +437,22 @@ def _format_finance_text(rows: list[dict], accounts_list: str | None = None) -> 
         amount = row.get("amount")
         currency = row.get("currency") or ""
         if amount is not None:
-            totals[currency] = totals.get(currency, 0.0) + float(amount)
-        amount_str = f"{amount:.2f} {currency}" if amount is not None else "—"
+            signed = float(amount) if is_income else -float(amount)
+            totals[currency] = totals.get(currency, 0.0) + signed
+        if amount is not None:
+            marker = "🟢" if is_income else "🔴"
+            sign = "+" if is_income else "-"
+            amount_str = f"{marker} {sign}{amount:.2f} {currency}"
+        else:
+            amount_str = "—"
         display = desc if not category or category == desc else f"{desc} ({category})"
         lines.append(f"{i}. {display} — {amount_str}")
 
     if totals:
-        total_parts = [f"{v:.2f} {k}" if k else f"{v:.2f}" for k, v in totals.items()]
+        total_parts = []
+        for k, v in totals.items():
+            sign = "+" if v >= 0 else ""
+            total_parts.append(f"{sign}{v:.2f} {k}" if k else f"{sign}{v:.2f}")
         lines.append(f"\nИтого: {', '.join(total_parts)}")
 
     return "\n".join(lines)
