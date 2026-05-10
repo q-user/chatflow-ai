@@ -277,7 +277,7 @@ async def test_download_and_parse_media_audio():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
     ):
         text, paths = await _download_and_parse_media(file_items, "test_token", "TG")
 
@@ -307,7 +307,7 @@ async def test_download_and_parse_media_document():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch(
             "infrastructure.parsers.process_document",
             return_value="Document content here",
@@ -484,7 +484,7 @@ async def test_finance_ai_pipeline_with_audio():
 
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch(
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
@@ -560,7 +560,7 @@ async def test_finance_ai_pipeline_with_audio_and_document():
 
     with (
         patch("infrastructure.ai.create_ai_adapter", return_value=mock_ai),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch(
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
@@ -1166,7 +1166,7 @@ async def test_download_and_parse_media_audio_unlinks_on_success():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
     ):
         text, paths = await _download_and_parse_media(file_items, "tok", "TG")
@@ -1193,7 +1193,7 @@ async def test_download_and_parse_media_audio_unlinks_on_transcribe_failure():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch("infrastructure.task_queue.tasks.os.unlink") as mock_unlink,
     ):
         text, paths = await _download_and_parse_media(file_items, "tok", "TG")
@@ -1269,7 +1269,7 @@ async def test_download_and_parse_media_unlink_oserror_swallowed():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch(
             "infrastructure.task_queue.tasks.os.unlink", side_effect=OSError("No file")
         ),
@@ -1353,7 +1353,7 @@ async def test_download_and_parse_media_opus_audio():
             "infrastructure.task_queue.tasks._adapter_factory",
             return_value=mock_adapter,
         ),
-        patch("infrastructure.stt.create_stt_adapter", return_value=mock_stt),
+        patch("infrastructure.task_queue.tasks._stt_adapter_factory", lambda: mock_stt),
         patch("infrastructure.task_queue.tasks.os.unlink"),
     ):
         text, paths = await _download_and_parse_media(file_items, "tok", "TG")

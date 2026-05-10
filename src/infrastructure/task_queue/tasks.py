@@ -22,17 +22,30 @@ from infrastructure.messengers import create_adapter as _default_create_adapter
 from infrastructure.task_queue.celery_app import celery_app
 
 # lazy module-level import for STT (avoid import-time side effects)
-_create_stt_adapter = None
+_stt_adapter_factory = None
 
 
 def _get_stt_adapter():
     """Lazy initializer for STT adapter."""
-    global _create_stt_adapter
-    if _create_stt_adapter is None:
+    global _stt_adapter_factory
+    if _stt_adapter_factory is None:
         from infrastructure.stt import create_stt_adapter
 
-        _create_stt_adapter = create_stt_adapter
-    return _create_stt_adapter()
+        _stt_adapter_factory = create_stt_adapter
+    return _stt_adapter_factory()
+
+
+def set_stt_adapter_factory(factory) -> None:
+    """Override the STT adapter factory for testing or custom wiring."""
+    global _stt_adapter_factory
+    _stt_adapter_factory = factory
+
+
+def reset_stt_adapter_factory() -> None:
+    """Reset the STT adapter factory to lazy module-level import."""
+    global _stt_adapter_factory
+    _stt_adapter_factory = None
+
 
 logger = logging.getLogger(__name__)
 
