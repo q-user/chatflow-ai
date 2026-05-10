@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from typing import Any, cast, Awaitable
 
@@ -22,6 +23,8 @@ class OTPService:
     def __init__(self, redis: Redis) -> None:
         self._redis = redis
 
+    MAX_COLLISION_RETRIES = 10
+
     async def generate_code(self, user_id: uuid.UUID) -> str:
         """Generate a 6-digit OTP code for a user.
 
@@ -30,6 +33,7 @@ class OTPService:
         - otp_reverse:{code} → user_id (for bot reverse lookup)
 
         Rate-limited to 1 request per 60 seconds per user.
+        Handles collisions by retrying up to MAX_COLLISION_RETRIES.
 
         :raises RateLimitExceeded: If code was generated less than 60s ago.
         """
@@ -38,9 +42,20 @@ class OTPService:
         if exists:
             raise RateLimitExceeded("OTP code can be generated once per minute")
 
-        code = self._generate_code()
         otp_key = f"otp:{user_id}"
-        reverse_key = f"otp_reverse:{code}"
+
+        for _ in range(self.MAX_COLLISION_RETRIES):
+            code = self._generate_code()
+            reverse_key = f"otp_reverse:{code}"
+            collision = await self._redis.exists(reverse_key)
+            if not collision:
+                break
+        else:
+            # All retries exhausted — use timestamped code as last resort
+            import time
+
+            code = f"{int(time.time()) % 1_000_000:06d}"
+            reverse_key = f"otp_reverse:{code}"
 
         # Атомарно: записываем код + reverse lookup + rate-limit флаг
         async with self._redis.pipeline(transaction=True) as pipe:
@@ -101,8 +116,6 @@ class OTPService:
     @staticmethod
     def _generate_code() -> str:
         """Generate a 6-digit numeric code."""
-        import secrets
-
         return f"{secrets.randbelow(1_000_000):06d}"
 
 
@@ -111,9 +124,21 @@ class OTPService:
 
         Stores invite:{code} → str(company_id) with TTL=86400s (24h).
         No rate-limiting — invites are cheap and stateless.
+        Handles collisions by retrying up to MAX_COLLISION_RETRIES.
         """
-        code = self._generate_code()
-        key = f"invite:{code}"
+        for _ in range(self.MAX_COLLISION_RETRIES):
+            code = self._generate_code()
+            key = f"invite:{code}"
+            collision = await self._redis.exists(key)
+            if not collision:
+                break
+        else:
+            # All retries exhausted — use timestamped code as last resort
+            import time
+
+            code = f"{int(time.time()) % 1_000_000:06d}"
+            key = f"invite:{code}"
+
         await self._redis.set(key, str(company_id), ex=86_400)
         return code
 

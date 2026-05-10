@@ -268,3 +268,55 @@ async def test_verify_invite_code_invalid_returns_none(
     """verify_invite_code returns None for unknown/invalid code."""
     result = await otp_service.verify_invite_code("000000")
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_code_avoids_collision(
+    otp_service: OTPService, fake_redis: FakeAsyncRedis, user_id: uuid.UUID, monkeypatch
+):
+    """generate_code retries when reverse key already exists."""
+    code = await otp_service.generate_code(user_id)
+    assert await fake_redis.exists(f"otp_reverse:{code}")
+
+    other_user_id = uuid.uuid4()
+
+    # Force next generated code to be the same (collision)
+    call_count = 0
+
+    def _colliding_generate():
+        nonlocal call_count
+        call_count += 1
+        return code if call_count == 1 else "999999"
+
+    monkeypatch.setattr(otp_service, "_generate_code", _colliding_generate)
+
+    code2 = await otp_service.generate_code(other_user_id)
+    assert code2 != code
+    assert code2 == "999999"
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_avoids_collision(
+    otp_service: OTPService, fake_redis: FakeAsyncRedis, monkeypatch
+):
+    """generate_invite_code retries when invite key already exists."""
+    company_id = uuid.uuid4()
+    code = await otp_service.generate_invite_code(company_id)
+    assert await fake_redis.exists(f"invite:{code}")
+
+    company_id2 = uuid.uuid4()
+
+    call_count = 0
+
+    def _colliding_generate():
+        nonlocal call_count
+        call_count += 1
+        return code if call_count == 1 else "999999"
+
+    monkeypatch.setattr(otp_service, "_generate_code", _colliding_generate)
+
+    code2 = await otp_service.generate_invite_code(company_id2)
+    assert code2 != code
+    assert code2 == "999999"
+    assert call_count == 2

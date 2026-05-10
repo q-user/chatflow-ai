@@ -5,11 +5,19 @@ This service lives in infrastructure because it depends on SQLAlchemy models.
 
 import uuid
 
+import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.domain.messenger import MESSENGER_TYPE_TO_FIELD
 from core.services.otp import OTPService
 from infrastructure.database.models.user import UserTable
+
+# Pre-computed bcrypt hash of an impossible password for shadow users.
+# Structurally valid so fastapi-users doesn't crash on password checks,
+# but will never verify successfully.
+_SHADOW_PASSWORD_HASH = bcrypt.hashpw(
+    b"__shadow_user__", bcrypt.gensalt()
+).decode()
 
 
 class MessengerLinkService:
@@ -56,7 +64,7 @@ class MessengerLinkService:
 
         new_user = UserTable(
             email=f"invite_{uuid.uuid4().hex[:8]}@chatflow.local",
-            hashed_password="!",
+            hashed_password=_SHADOW_PASSWORD_HASH,
             company_id=company_id,
             is_active=True,
             is_verified=False,

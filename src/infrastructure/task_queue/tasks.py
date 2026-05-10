@@ -5,6 +5,7 @@ updates status, and delivers artifact to the user.
 """
 
 import asyncio
+import concurrent.futures
 import csv
 import logging
 import os
@@ -12,13 +13,26 @@ import uuid
 import httpx
 from kombu.exceptions import OperationalError
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from core.interfaces.ai import AIServiceError
 from infrastructure.database.models.project import ProjectTable
 from infrastructure.database import session as db_session
 from infrastructure.messengers import create_adapter as _default_create_adapter
 from infrastructure.task_queue.celery_app import celery_app
+
+# lazy module-level import for STT (avoid import-time side effects)
+_create_stt_adapter = None
+
+
+def _get_stt_adapter():
+    """Lazy initializer for STT adapter."""
+    global _create_stt_adapter
+    if _create_stt_adapter is None:
+        from infrastructure.stt import create_stt_adapter
+
+        _create_stt_adapter = create_stt_adapter
+    return _create_stt_adapter()
 
 logger = logging.getLogger(__name__)
 
@@ -436,13 +450,19 @@ def _format_finance_text(rows: list[dict], accounts_list: str | None = None) -> 
             category = f"⚠️ {category}"
         amount = row.get("amount")
         currency = row.get("currency") or ""
+        amount_value = None
         if amount is not None:
-            signed = float(amount) if is_income else -float(amount)
+            try:
+                amount_value = float(amount)
+            except (ValueError, TypeError):
+                logger.warning("Invalid amount value: %r, skipping", amount)
+                amount_value = None
+        if amount_value is not None:
+            signed = amount_value if is_income else -amount_value
             totals[currency] = totals.get(currency, 0.0) + signed
-        if amount is not None:
             marker = "🟢" if is_income else "🔴"
             sign = "+" if is_income else "-"
-            amount_str = f"{marker} {sign}{amount:.2f} {currency}"
+            amount_str = f"{marker} {sign}{amount_value:.2f} {currency}"
         else:
             amount_str = "—"
         display = desc if not category or category == desc else f"{desc} ({category})"
@@ -530,7 +550,16 @@ def _finance_module_handler(
 
     accounts_list = (module_config or {}).get("accounts_list", "")
     if accounts_list:
-        system_prompt += f"\n\nChart of Accounts:\n{accounts_list}"
+        accounts_section = f"\n\nChart of Accounts:\n{accounts_list}"
+        if len(system_prompt) + len(accounts_section) > 8_000:
+            logger.warning(
+                "Prompt exceeds 8k chars (%d), truncating accounts list",
+                len(system_prompt) + len(accounts_section),
+            )
+            # Truncate to roughly 2k chars, keeping header
+            truncated = accounts_list[:2_000] + "\n...(truncated)"
+            accounts_section = f"\n\nChart of Accounts:\n{truncated}"
+        system_prompt += accounts_section
 
     # 3. Filter ALL file items (not just images)
     file_items = [
@@ -543,18 +572,23 @@ def _finance_module_handler(
     model_id: str | None = llm_routing.get("model")
 
     # 5. Single event loop: download + parse media + call AI
-    result_json = asyncio.run(
-        _finance_ai_pipeline(
-            system_prompt,
-            combined_text,
-            file_items,
-            bot_token,
-            messenger_type,
-            provider_id=provider_id,
-            model_id=model_id,
-            llm_routing=llm_routing,
+    # Run in a thread pool so the sync Celery worker thread isn't blocked
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            asyncio.run,
+            _finance_ai_pipeline(
+                system_prompt,
+                combined_text,
+                file_items,
+                bot_token,
+                messenger_type,
+                provider_id=provider_id,
+                model_id=model_id,
+                llm_routing=llm_routing,
+            ),
         )
-    )
+        result_json = future.result()
+        result_json = cast(dict, result_json)
 
     # 6. Generate CSV from JSON (graceful if AI returned no rows)
     rows = result_json.get("rows", [])
@@ -677,12 +711,10 @@ async def _download_and_parse_media(
                     logger.info("Added image: %s", local_path)
                 elif category == "audio":
                     if stt is None:
-                        from infrastructure.stt import create_stt_adapter
-
-                        stt = create_stt_adapter()
+                        stt = _get_stt_adapter()
                         logger.info(
                             "Initialized STT adapter: provider=%s",
-                            create_stt_adapter.__module__,
+                            stt.__class__.__module__,
                         )
                     try:
                         text = await stt.transcribe(local_path)

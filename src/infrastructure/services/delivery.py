@@ -4,6 +4,7 @@ Extracted from Celery tasks to decouple delivery logic from task orchestration.
 """
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 
@@ -26,6 +27,22 @@ def reset_adapter_factory() -> None:
     _adapter_factory = _default_create_adapter
 
 
+def _run_async(coro) -> None:
+    """Run an async coroutine from sync code, handling running event loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None:
+        asyncio.run(coro)
+    else:
+        # We're inside a running loop (e.g., tests) — run in a separate thread
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            future.result()
+
+
 def _send_text_message(
     bot_token: str,
     messenger_type: str,
@@ -44,7 +61,7 @@ def _send_text_message(
         finally:
             await adapter.aclose()
 
-    asyncio.run(_send())
+    _run_async(_send())
 
 
 def _deliver_artifact(
@@ -79,4 +96,4 @@ def _deliver_artifact(
             except OSError:
                 logger.warning("Failed to cleanup artifact: %s", artifact_path)
 
-    asyncio.run(_send())
+    _run_async(_send())

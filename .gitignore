@@ -47,3 +47,6 @@ Thumbs.db
 # Testing
 .pytest_cache/
 .mypy_cache/
+
+
+opencode.jsonc

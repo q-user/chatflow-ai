@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "ChatFlow AI"
     environment: str = "development"
     debug: bool = False
-    domain: str = "194.87.69.220.nip.io"
+    domain: str = ""
 
     database_url: str = ""
     database_sync_url: str = ""
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
 
     # Default timeout for AI adapters (fallback when provider config has no override)
-    ai_timeout: float = 600.0  # NVIDIA free tier can take up to 10 min
+    ai_timeout: float = 120.0  # 2 minutes; fallback AI retries handle slow providers
 
     # STT Provider selection: "groq" or "riva"
     stt_provider: str = "groq"

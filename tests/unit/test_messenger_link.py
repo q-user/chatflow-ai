@@ -101,7 +101,8 @@ async def test_link_by_invite_code_creates_shadow_user(
     assert added_user.email.startswith("invite_")
     assert added_user.email.endswith("@chatflow.local")
     assert added_user.company_id == company_id
-    assert added_user.hashed_password == "!"
+    assert added_user.hashed_password != "!"
+    assert added_user.hashed_password.startswith("$2b$")
     assert added_user.is_active is True
     assert added_user.telegram_id == "tg_789"
     assert mock_session.flush.await_count == 2
