@@ -1161,6 +1161,219 @@ async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
+async def test_edit_bot_mx_secret_preserved(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit without secret field preserves existing MX secret."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_preserve_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_preserve_token")
+    )
+    bot = result.scalar_one()
+    original_secret = bot.secret
+    assert original_secret is not None
+
+    # Edit without passing secret — existing secret must stay intact
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_preserve_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.secret == original_secret
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_mx_secret_updated(auth_client: AsyncClient, db_session):
+    """POST /bots/{id}/edit with explicit secret updates MX secret."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_update_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_update_token")
+    )
+    bot = result.scalar_one()
+    original_secret = bot.secret
+    assert original_secret is not None
+
+    new_secret = "new_secret_12345"
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_update_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            "secret": new_secret,
+        },
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.secret == new_secret
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_mx_secret_changed_re_registers_webhook(
+    auth_client: AsyncClient, db_session, mock_adapter: AsyncMock
+):
+    """POST /bots/{id}/edit with new MX secret calls register_webhook."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_reg_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_reg_token")
+    )
+    bot = result.scalar_one()
+    original_secret = bot.secret
+    assert original_secret is not None
+
+    # Reset mock to clear create_bot call
+    mock_adapter.register_webhook.reset_mock()
+
+    new_secret = "new_secret_12345"
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_reg_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            "secret": new_secret,
+        },
+    )
+    assert resp.status_code == 200
+
+    # register_webhook should be called with new secret
+    mock_adapter.register_webhook.assert_awaited_once()
+    call_args = mock_adapter.register_webhook.await_args
+    assert call_args.kwargs["secret"] == new_secret
+    assert f"/api/v1/hooks/MX/{bot.id}" in call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_mx_secret_unchanged_no_re_register(
+    auth_client: AsyncClient, db_session, mock_adapter: AsyncMock
+):
+    """POST /bots/{id}/edit without changing MX secret does NOT call register_webhook."""
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_noreg_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_noreg_token")
+    )
+    bot = result.scalar_one()
+
+    # Reset mock to clear create_bot call
+    mock_adapter.register_webhook.reset_mock()
+
+    # Edit without changing secret
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_noreg_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    # register_webhook should NOT be called on edit when secret unchanged
+    mock_adapter.register_webhook.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_edit_bot_mx_re_register_failure_still_saves(
+    auth_client: AsyncClient, db_session, mock_adapter: AsyncMock
+):
+    """MX webhook re-registration failure does not block edit; DB still updated."""
+    # Create bot via API first (register_webhook succeeds)
+    resp = await auth_client.post(
+        "/bots",
+        data={
+            "token": "edit_mx_fail_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+        },
+    )
+    assert resp.status_code == 200
+
+    result = await db_session.execute(
+        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_fail_token")
+    )
+    bot = result.scalar_one()
+
+    # Now make re-register fail for the edit call
+    mock_adapter.register_webhook.side_effect = ValueError("MAX API down")
+
+    new_secret = "new_secret_67890"
+    resp = await auth_client.post(
+        f"/bots/{bot.id}/edit",
+        data={
+            "token": "edit_mx_fail_token",
+            "messenger_type": "MX",
+            "module_type": "finance",
+            "ai_provider": "google",
+            "ai_model": "gemini-3-flash-preview",
+            "secret": new_secret,
+        },
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(bot)
+    assert bot.secret == new_secret
+
+
+@pytest.mark.asyncio
 async def test_edit_bot_fallback_ai_saved(auth_client: AsyncClient, db_session):
     """POST /bots/{id}/edit saves fallback AI provider and model."""
     resp = await auth_client.post(

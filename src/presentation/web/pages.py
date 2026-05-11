@@ -1,5 +1,6 @@
 """Web Dashboard pages (Jinja2 + HTMX)."""
 
+import logging
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -20,6 +21,8 @@ from infrastructure.messengers import UnsupportedMessengerError
 from infrastructure.services.hook_router import AdapterFactory, get_adapter_factory
 from presentation.api.otp import get_otp_service
 from core.services.otp import OTPService, RateLimitExceeded
+
+logger = logging.getLogger(__name__)
 
 # Resolve templates directory relative to this file
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -341,6 +344,7 @@ async def edit_bot(
     user: UserTable = Depends(current_active_user_cookie),
     available_modules: list[str] = Depends(get_user_available_modules),
     session: AsyncSession = Depends(get_db_session),
+    adapter_factory: AdapterFactory = Depends(get_adapter_factory),
 ):
     """Update bot fields. Token and messenger_type are readonly.
 
@@ -379,13 +383,15 @@ async def edit_bot(
     if bot is None:
         return HTMLResponse("Bot not found", status_code=404)
 
-    # Auto-generate secret for MX bots if empty
-    if bot.messenger_type == "MX" and not secret:
+    # Only auto-generate secret for MX bots when it has NEVER been set
+    if bot.messenger_type == "MX" and not bot.secret and not secret:
         secret = uuid.uuid4().hex
 
     # Apply updates (merge to preserve other config keys like system_prompt)
+    original_secret = bot.secret
     bot.module_type = module_type
-    bot.secret = secret
+    if secret is not None:
+        bot.secret = secret
     config = dict(bot.config or {})
     config["llm_routing"] = {
         "provider": ai_provider,
@@ -395,6 +401,23 @@ async def edit_bot(
     }
     config["accounts_list"] = accounts_list
     bot.config = config
+
+    # Re-register webhook if MX secret changed
+    if bot.messenger_type == "MX" and bot.secret != original_secret:
+        webhook_url = (
+            f"https://{settings.domain}/api/v1/hooks/MX/{bot.id}"
+        )
+        adapter = adapter_factory(bot.messenger_type, bot.token)
+        try:
+            await adapter.register_webhook(webhook_url, secret=bot.secret)
+        except (UnsupportedMessengerError, NotImplementedError, ValueError) as exc:
+            logger.warning(
+                "MX webhook re-registration failed for bot %s: %s",
+                bot.id,
+                exc,
+            )
+        finally:
+            await adapter.aclose()
 
     await session.commit()
     await session.refresh(bot)

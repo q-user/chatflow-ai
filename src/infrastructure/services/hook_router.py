@@ -95,9 +95,11 @@ class HookRouterService:
         if bot.secret:
             if webhook_secret is None or webhook_secret != bot.secret:
                 logger.warning(
-                    "Webhook auth failed for %s bot %s",
+                    "Webhook auth failed for %s bot %s: secret mismatch (expected=%s, got=%s)",
                     messenger_type,
                     bot_uuid,
+                    bot.secret,
+                    webhook_secret,
                 )
                 return 401, "Invalid webhook secret"
 
