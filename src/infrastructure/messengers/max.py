@@ -358,6 +358,32 @@ class MaxAdapter(BaseHttpAdapter, IMessengerAdapter):
                 f"MAX webhook registration failed: {result.get('message', 'unknown')}"
             )
 
+    async def unregister_webhook(self, webhook_url: str) -> None:
+        """Unregister a webhook via DELETE /subscriptions.
+
+        :param webhook_url: Full public URL that was previously registered.
+        :raises ValueError: If network error or MAX API rejects the request.
+        """
+        http = await self._get_http_client()
+        url = f"{self.BASE_URL}/subscriptions"
+
+        body = {"url": webhook_url}
+        try:
+            resp = await http.request("DELETE", url, json=body, headers=self._headers())
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error unregistering webhook: {e}") from e
+
+        if resp.status_code != 200:
+            raise ValueError(
+                f"MAX API rejected webhook unregistration: {resp.status_code}"
+            )
+
+        result = resp.json()
+        if not result.get("success"):
+            raise ValueError(
+                f"MAX webhook unregistration failed: {result.get('message', 'unknown')}"
+            )
+
     async def answer_callback(self, callback_id: str) -> None:
         """Acknowledge callback query via POST /answers.
 

@@ -81,6 +81,14 @@ class IMessengerAdapter(ABC):
         """
         pass  # default: no-op — override in adapters that support it
 
+    async def unregister_webhook(self, webhook_url: str) -> None:
+        """Unregister a webhook URL from the messenger platform.
+
+        :param webhook_url: Full public URL that was previously registered.
+        :raises ValueError: If platform rejects the request.
+        """
+        pass  # default: no-op — override in adapters that support it
+
     async def aclose(self) -> None:
         """Release underlying resources (HTTP connections, etc.).
 

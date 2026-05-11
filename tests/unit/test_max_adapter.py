@@ -396,6 +396,50 @@ async def test_register_webhook_network_error(max_adapter):
 
 
 # ──────────────────────────────────────────────
+# unregister_webhook
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_unregister_webhook_success(max_adapter):
+    """Verify unregister_webhook sends DELETE to /subscriptions."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.request.return_value = _mock_response(json_data={"success": True})
+    max_adapter._http = mock_client
+
+    await max_adapter.unregister_webhook("https://example.com/hook")
+
+    call_args = mock_client.request.call_args
+    assert call_args[0][0] == "DELETE"
+    assert call_args[0][1] == "https://platform-api.max.ru/subscriptions"
+    assert call_args[1]["json"]["url"] == "https://example.com/hook"
+
+
+@pytest.mark.asyncio
+async def test_unregister_webhook_rejected(max_adapter):
+    """Verify unregister_webhook raises ValueError when API rejects."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.request.return_value = _mock_response(
+        json_data={"success": False, "message": "Not subscribed"}
+    )
+    max_adapter._http = mock_client
+
+    with pytest.raises(ValueError, match="MAX webhook unregistration failed"):
+        await max_adapter.unregister_webhook("https://example.com/hook")
+
+
+@pytest.mark.asyncio
+async def test_unregister_webhook_network_error(max_adapter):
+    """Verify unregister_webhook raises ValueError on network error."""
+    mock_client = AsyncMock(spec=AsyncClient)
+    mock_client.request.side_effect = httpx.RequestError("timeout")
+    max_adapter._http = mock_client
+
+    with pytest.raises(ValueError, match="Network error unregistering webhook"):
+        await max_adapter.unregister_webhook("https://example.com/hook")
+
+
+# ──────────────────────────────────────────────
 # answer_callback
 # ──────────────────────────────────────────────
 

@@ -404,11 +404,17 @@ async def edit_bot(
 
     # Re-register webhook if MX secret changed
     if bot.messenger_type == "MX" and bot.secret != original_secret:
-        webhook_url = (
-            f"https://{settings.domain}/api/v1/hooks/MX/{bot.id}"
-        )
+        webhook_url = f"https://{settings.domain}/api/v1/hooks/MX/{bot.id}"
         adapter = adapter_factory(bot.messenger_type, bot.token)
         try:
+            try:
+                await adapter.unregister_webhook(webhook_url)
+            except (UnsupportedMessengerError, NotImplementedError, ValueError) as exc:
+                logger.warning(
+                    "MX webhook un-registration failed for bot %s: %s",
+                    bot.id,
+                    exc,
+                )
             await adapter.register_webhook(webhook_url, secret=bot.secret)
         except (UnsupportedMessengerError, NotImplementedError, ValueError) as exc:
             logger.warning(

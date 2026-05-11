@@ -1176,7 +1176,9 @@ async def test_edit_bot_mx_secret_preserved(auth_client: AsyncClient, db_session
     assert resp.status_code == 200
 
     result = await db_session.execute(
-        select(BotInstanceTable).where(BotInstanceTable.token == "edit_mx_preserve_token")
+        select(BotInstanceTable).where(
+            BotInstanceTable.token == "edit_mx_preserve_token"
+        )
     )
     bot = result.scalar_one()
     original_secret = bot.secret
@@ -1280,7 +1282,8 @@ async def test_edit_bot_mx_secret_changed_re_registers_webhook(
     )
     assert resp.status_code == 200
 
-    # register_webhook should be called with new secret
+    # unregister_webhook should be called before register_webhook
+    mock_adapter.unregister_webhook.assert_awaited_once()
     mock_adapter.register_webhook.assert_awaited_once()
     call_args = mock_adapter.register_webhook.await_args
     assert call_args.kwargs["secret"] == new_secret
@@ -1325,8 +1328,9 @@ async def test_edit_bot_mx_secret_unchanged_no_re_register(
     )
     assert resp.status_code == 200
 
-    # register_webhook should NOT be called on edit when secret unchanged
+    # Neither register nor unregister should be called on edit when secret unchanged
     mock_adapter.register_webhook.assert_not_awaited()
+    mock_adapter.unregister_webhook.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1354,6 +1358,7 @@ async def test_edit_bot_mx_re_register_failure_still_saves(
 
     # Now make re-register fail for the edit call
     mock_adapter.register_webhook.side_effect = ValueError("MAX API down")
+    mock_adapter.unregister_webhook.side_effect = ValueError("MAX API down")
 
     new_secret = "new_secret_67890"
     resp = await auth_client.post(
