@@ -299,10 +299,10 @@ def test_create_ai_adapter(monkeypatch):
 
     monkeypatch.setattr("infrastructure.config.settings.google_api_key", "test_key")
 
-    adapter = create_ai_adapter("google", "gemini-3-flash-preview")
+    adapter = create_ai_adapter("google", "gemini-3.5-flash")
     assert isinstance(adapter, OpenRouterAdapter)
     assert adapter._api_key == "test_key"
     assert (
         adapter._base_url == "https://generativelanguage.googleapis.com/v1beta/openai"
     )
-    assert adapter._model == "gemini-3-flash-preview"
+    assert adapter._model == "gemini-3.5-flash"

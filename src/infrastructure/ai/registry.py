@@ -15,13 +15,8 @@ AI_PROVIDERS: dict[str, dict] = {
         "use_proxy": True,
         "models": [
             {
-                "id": "gemini-3.1-flash-lite-preview",
-                "label": "Gemini 3.1 Flash Lite Preview",
-                "vision": True,
-            },
-            {
-                "id": "gemini-3-flash-preview",
-                "label": "Gemini 3 Flash Preview",
+                "id": "gemini-3.5-flash",
+                "label": "Gemini 3.5 Flash",
                 "vision": True,
             },
             {

@@ -83,7 +83,7 @@ async def test_create_bot_success(auth_client: AsyncClient):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -109,7 +109,7 @@ async def test_create_bot_invalid_field(
         "messenger_type": "TG",
         "module_type": "finance",
         "ai_provider": "google",
-        "ai_model": "gemini-3-flash-preview",
+        "ai_model": "gemini-3.5-flash",
     }
     data[field] = value
     resp = await auth_client.post("/bots", data=data)
@@ -134,7 +134,7 @@ async def test_create_bot_webhook_failure_returns_400(
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 400
@@ -159,7 +159,7 @@ async def test_create_bot_unsupported_messenger_returns_400(
             "messenger_type": "WA",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 400
@@ -189,7 +189,7 @@ async def test_create_bot_aclose_called_on_webhook_failure(
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
 
@@ -217,7 +217,7 @@ async def test_toggle_bot_cycle(
             "messenger_type": messenger,
             "module_type": module,
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -310,7 +310,7 @@ async def test_dashboard_shows_bot_table(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "estimator",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -392,7 +392,7 @@ async def test_create_bot_restricted_company_returns_400(
             "messenger_type": "TG",
             "module_type": "hr",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 400
@@ -422,7 +422,7 @@ async def test_create_bot_superuser_bypass(client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "hr",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -483,7 +483,7 @@ async def test_empty_allowed_modules_form_empty(client: AsyncClient, db_session)
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 403
@@ -639,7 +639,7 @@ async def test_edit_bot_get_form(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -671,7 +671,7 @@ async def test_edit_bot_post_success(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -719,7 +719,7 @@ async def test_edit_bot_post_invalid_provider(auth_client: AsyncClient, db_sessi
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -753,7 +753,7 @@ async def test_edit_bot_post_module_changed(auth_client: AsyncClient, db_session
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -770,7 +770,7 @@ async def test_edit_bot_post_module_changed(auth_client: AsyncClient, db_session
             "messenger_type": "TG",  # readonly, must match current
             "module_type": "estimator",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -799,9 +799,7 @@ async def test_edit_bot_unauthorized_company(auth_client: AsyncClient, db_sessio
         messenger_type="TG",
         module_type="finance",
         status="active",
-        config={
-            "llm_routing": {"provider": "google", "model": "gemini-3-flash-preview"}
-        },
+        config={"llm_routing": {"provider": "google", "model": "gemini-3.5-flash"}},
     )
     db_session.add(other_bot)
     await db_session.commit()
@@ -820,7 +818,7 @@ async def test_bot_row_endpoint(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -881,7 +879,7 @@ async def test_create_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             # secret omitted
         },
     )
@@ -906,7 +904,7 @@ async def test_edit_bot_messenger_type_ignored(auth_client: AsyncClient, db_sess
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -923,7 +921,7 @@ async def test_edit_bot_messenger_type_ignored(auth_client: AsyncClient, db_sess
             "messenger_type": "INVALID",  # readonly, ignored
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -943,7 +941,7 @@ async def test_edit_bot_invalid_module_type(auth_client: AsyncClient, db_session
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -960,7 +958,7 @@ async def test_edit_bot_invalid_module_type(auth_client: AsyncClient, db_session
             "messenger_type": "TG",
             "module_type": "invalid_module",  # definitely not in allowed_modules
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 400
@@ -978,7 +976,7 @@ async def test_edit_bot_invalid_ai_model(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1015,7 +1013,7 @@ async def test_edit_bot_post_not_found(auth_client: AsyncClient):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 404
@@ -1034,7 +1032,7 @@ async def test_edit_bot_config_merge_preserves_system_prompt(
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1046,7 +1044,7 @@ async def test_edit_bot_config_merge_preserves_system_prompt(
     bot = result.scalar_one()
     bot.config = {
         "system_prompt": "Custom prompt",
-        "llm_routing": {"provider": "google", "model": "gemini-3-flash-preview"},
+        "llm_routing": {"provider": "google", "model": "gemini-3.5-flash"},
     }
     await db_session.commit()
 
@@ -1093,7 +1091,7 @@ async def test_edit_bot_empty_secret_normalized(auth_client: AsyncClient, db_ses
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1111,7 +1109,7 @@ async def test_edit_bot_empty_secret_normalized(auth_client: AsyncClient, db_ses
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             "secret": "   ",
         },
     )
@@ -1128,7 +1126,7 @@ async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1150,7 +1148,7 @@ async def test_edit_bot_mx_auto_secret(auth_client: AsyncClient, db_session):
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1170,7 +1168,7 @@ async def test_edit_bot_mx_secret_preserved(auth_client: AsyncClient, db_session
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1192,7 +1190,7 @@ async def test_edit_bot_mx_secret_preserved(auth_client: AsyncClient, db_session
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1211,7 +1209,7 @@ async def test_edit_bot_mx_secret_updated(auth_client: AsyncClient, db_session):
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1231,7 +1229,7 @@ async def test_edit_bot_mx_secret_updated(auth_client: AsyncClient, db_session):
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             "secret": new_secret,
         },
     )
@@ -1253,7 +1251,7 @@ async def test_edit_bot_mx_secret_changed_re_registers_webhook(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1276,7 +1274,7 @@ async def test_edit_bot_mx_secret_changed_re_registers_webhook(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             "secret": new_secret,
         },
     )
@@ -1302,7 +1300,7 @@ async def test_edit_bot_mx_secret_unchanged_no_re_register(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1323,7 +1321,7 @@ async def test_edit_bot_mx_secret_unchanged_no_re_register(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1346,7 +1344,7 @@ async def test_edit_bot_mx_re_register_failure_still_saves(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1368,7 +1366,7 @@ async def test_edit_bot_mx_re_register_failure_still_saves(
             "messenger_type": "MX",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             "secret": new_secret,
         },
     )
@@ -1388,7 +1386,7 @@ async def test_edit_bot_fallback_ai_saved(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
         },
     )
     assert resp.status_code == 200
@@ -1405,7 +1403,7 @@ async def test_edit_bot_fallback_ai_saved(auth_client: AsyncClient, db_session):
             "messenger_type": "TG",
             "module_type": "finance",
             "ai_provider": "google",
-            "ai_model": "gemini-3-flash-preview",
+            "ai_model": "gemini-3.5-flash",
             "fallback_ai_provider": "openrouter",
             "fallback_ai_model": "google/gemma-4-26b-a4b-it:free",
         },
