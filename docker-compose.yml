@@ -49,6 +49,11 @@ services:
     image: docker.io/library/redis:8-alpine
     container_name: cfai_redis
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     logging:
       driver: "json-file"
       options:
@@ -72,7 +77,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -91,7 +96,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - .env
     healthcheck:
