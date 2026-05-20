@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 
 # 5. Установка зависимостей БЕЗ кэша (критично для 5ГБ SSD)
-# --no-cache экономит около 200-400МБ внутри образа
-RUN uv pip install --no-cache -r pyproject.toml
+# --no-group pdf исключает pymupdf4llm (~150MB) — PDF парсинг опционален
+RUN uv sync --frozen --no-cache --no-group pdf --no-group dev
 
 # 6. Копируем остальной код проекта с правами пользователя
 COPY --chown=appuser:appuser . .

@@ -285,7 +285,6 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
-    { name = "pymupdf4llm" },
     { name = "pysocks" },
     { name = "python-docx" },
     { name = "redis" },
@@ -308,6 +307,9 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
 ]
+pdf = [
+    { name = "pymupdf4llm" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -323,7 +325,6 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
-    { name = "pymupdf4llm", specifier = ">=0.0.17" },
     { name = "pysocks", specifier = ">=1.7.1" },
     { name = "python-docx", specifier = ">=1.1.0" },
     { name = "redis", specifier = ">=7.4.0" },
@@ -347,6 +348,7 @@ dev = [
     { name = "ty", specifier = ">=0.0.26" },
 ]
 main = []
+pdf = [{ name = "pymupdf4llm", specifier = ">=0.0.17" }]
 
 [[package]]
 name = "click"

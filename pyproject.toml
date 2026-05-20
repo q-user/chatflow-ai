@@ -17,7 +17,6 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pydantic[email]>=2.12.5",
     "pydantic-settings>=2.13.1",
-    "pymupdf4llm>=0.0.17",
     "python-docx>=1.1.0",
     "redis>=7.4.0",
     "sqlalchemy>=2.0.48",
@@ -27,6 +26,9 @@ dependencies = [
 
 [dependency-groups]
 main = []
+pdf = [
+    "pymupdf4llm>=0.0.17",
+]
 dev = [
     "celery-types>=0.26.0",
     "fakeredis[lua]>=2.26.0",
