@@ -18,11 +18,11 @@ RUN useradd -m appuser && chown appuser /app
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # 4. Копируем файлы зависимостей сразу с нужными правами
-COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+COPY --chown=appuser:appuser pyproject.toml uv.lock requirements.txt ./
 
 # 5. Установка зависимостей БЕЗ кэша (критично для 5ГБ SSD)
-# --no-group pdf исключает pymupdf4llm (~150MB) — PDF парсинг опционален
-RUN uv sync --frozen --no-cache --no-group pdf --no-group dev
+# requirements.txt сгенерирован без pymupdf4llm (optional pdf group)
+RUN uv pip install --no-cache -r requirements.txt
 
 # 6. Копируем остальной код проекта с правами пользователя
 COPY --chown=appuser:appuser . .
